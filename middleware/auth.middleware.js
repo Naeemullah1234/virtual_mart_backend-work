@@ -18,9 +18,7 @@ const protect = async (req, res, next) => {
 
         if (!token) {
 
-            return
-
-             res.status(401).json({ success: false, message: "Access Denied. No Token Provided.",});}
+            return res.status(401).json({ success: false, message: "Access Denied. No Token Provided.",});}
 
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
@@ -30,22 +28,21 @@ const protect = async (req, res, next) => {
 
         } catch (error) {
 
-        return 
-        res.status(401).json({success: false, message: "Invalid Token.", }); }};
+        return res.status(401).json({success: false, message: "Invalid Token.", }); }};
 
-       const authorize = (...roles) => {
-
-        return 
-        (req, res, next) => {
+      const authorize = (...roles) => {
+    return (req, res, next) => {
 
         if (!roles.includes(req.user.role)) {
-
-            return
-             res.status(403).json({ success: false, message: "Access Denied.",}); }
+            return res.status(403).json({
+                success: false,
+                message: "Access Denied."
+            });
+        }
 
         next();
-
-     };};
+    };
+};
 
 module.exports = {
     protect,
