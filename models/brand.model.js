@@ -40,13 +40,13 @@ const brandSchema = new mongoose.Schema(
   }
 );
 
-brandSchema.pre("save", function (next) {
+brandSchema.pre("save", function () {
   this.slug = slugify(this.name, {
     lower: true,
     strict: true,
   });
 
-  next();
+
 });
 
 module.exports = mongoose.model("Brand", brandSchema);
