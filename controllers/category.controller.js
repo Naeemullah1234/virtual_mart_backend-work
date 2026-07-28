@@ -8,14 +8,14 @@ const createCategory = async (req, res) => {
     const { name } = req.body;
 
     if (!name) {
-      return 
-      res.status(400).json({ success: false, message: "Category name is required.",}); }
+
+      return res.status(400).json({ success: false, message: "Category name is required.",}); }
 
     const existing = await Category.findOne({ name });
 
     if (existing) {
-      return 
-      res.status(400).json({ success: false, message: "Category already exists.", });}
+
+      return res.status(400).json({ success: false, message: "Category already exists.", });}
 
     const category = await Category.create({ name, slug: slugify(name, { lower: true }),});
 
@@ -45,15 +45,13 @@ const createCategory = async (req, res) => {
 
       if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
 
-    return
-     res.status(400).json({ success: false, message: "Invalid Category ID."});}
+    return res.status(400).json({ success: false, message: "Invalid Category ID."});}
 
         const category = await Category.findById(req.params.id);
 
         if (!category) {
 
-            return
-             res.status(404).json({ success: false, message: "Category not found."});}
+            return res.status(404).json({ success: false, message: "Category not found."});}
 
         res.status(200).json({ success: true, category });
 
@@ -69,8 +67,7 @@ const createCategory = async (req, res) => {
     try {
       if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
 
-    return 
-    res.status(400).json({ success: false, message: "Invalid Category ID."});}
+    return res.status(400).json({ success: false, message: "Invalid Category ID."});}
 
         const { name } = req.body;
 
@@ -78,8 +75,7 @@ const createCategory = async (req, res) => {
 
         if (!category) {
 
-            return
-            res.status(404).json({ success: false, message: "Category not found." });}
+            return res.status(404).json({ success: false, message: "Category not found." });}
 
         category.name = name || category.name;
         category.slug = slugify(category.name, { lower: true });
@@ -100,15 +96,13 @@ const createCategory = async (req, res) => {
     try {
       if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
 
-    return
-     res.status(400).json({success: false,message: "Invalid Category ID."});}
+    return res.status(400).json({success: false,message: "Invalid Category ID."});}
 
         const category = await Category.findById(req.params.id);
 
         if (!category) {
 
-            return
-         res.status(404).json({ success: false, message: "Category not found." });}
+            return res.status(404).json({ success: false, message: "Category not found." });}
 
         category.isDeleted = true;
 

@@ -10,15 +10,15 @@ const registerUser = async (req, res) => {
     if (
       !firstName || !email || !password) 
       {
-      return
-    res.status(400).json({success: false, message: "Please fill all required fields.",});}
+
+      return res.status(400).json({success: false, message: "Please fill all required fields.",});}
 
     
     const existingUser = await User.findOne({ email });
 
     if (existingUser) {
-      return
-       res.status(400).json({success: false,message: "Email already registered.",});}
+
+      return res.status(400).json({success: false,message: "Email already registered.",});}
 
    
     const user = await User.create({firstName, lastName, email, phone, password, role: "customer" });
@@ -44,20 +44,20 @@ const registerUser = async (req, res) => {
         const { email, password } = req.body;
 
         if (!email || !password) {
-            return 
-            res.status(400).json({ success: false,message: "Email and Password are required.",});}
+
+            return res.status(400).json({ success: false,message: "Email and Password are required.",});}
 
         const user = await User.findOne({ email });
 
         if (!user) {
-            return 
-            res.status(400).json({ success: false, message: "Invalid Email or Password.",});}
+
+            return  res.status(400).json({ success: false, message: "Invalid Email or Password.",});}
 
         const isMatch = await user.comparePassword(password);
 
         if (!isMatch) {
-            return 
-            res.status(400).json({ success: false,message: "Invalid Email or Password.",});}
+
+            return res.status(400).json({ success: false,message: "Invalid Email or Password.",});}
 
         user.lastLogin = new Date();
         await user.save();
@@ -82,9 +82,7 @@ const registerUser = async (req, res) => {
 
         if (!user) {
 
-         return
-
-         res.status(404).json({ success: false,message: "User not found.",});}
+         return res.status(404).json({ success: false,message: "User not found.",});}
 
          res.status(200).json({ success: true, user,});
 
