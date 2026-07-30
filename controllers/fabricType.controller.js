@@ -1,131 +1,74 @@
 const FabricType = require("../models/fabricType.model");
 const mongoose = require("mongoose");
 
-// Create Fabric Type
+
 const createFabricType = async (req, res) => {
   try {
     const { name, displayOrder } = req.body;
 
     if (!name) {
-      return res.status(400).json({
-        success: false,
-        message: "Fabric Type name is required.",
-      });
-    }
 
-    const existing = await FabricType.findOne({
-      name,
-      isDeleted: false,
-    });
+      return res.status(400).json({ success: false, message: "Fabric Type name is required.",});}
+
+    const existing = await FabricType.findOne({ name,isDeleted: false,});
 
     if (existing) {
-      return res.status(400).json({
-        success: false,
-        message: "Fabric Type already exists.",
-      });
-    }
 
-    const fabricType = await FabricType.create({
-      name,
-      displayOrder,
-    });
+      return res.status(400).json({success: false, message: "Fabric Type already exists.", });}
 
-    res.status(201).json({
-      success: true,
-      message: "Fabric Type created successfully.",
-      fabricType,
-    });
+    const fabricType = await FabricType.create({ name,displayOrder,});
 
-  } catch (error) {
-    console.log(error);
+    res.status(201).json({ success: true, message: "Fabric Type created successfully.",fabricType,});
 
-    res.status(500).json({
-      success: false,
-      message: "Server Error",
-    });
-  }
-};
+  } catch (error) { console.log(error);
 
-// Get All Fabric Types
-const getAllFabricTypes = async (req, res) => {
+    res.status(500).json({ success: false,message: "Server Error",});}};
+
+
+  const getAllFabricTypes = async (req, res) => {
   try {
 
-    const fabricTypes = await FabricType.find({
-      isDeleted: false,
-    }).sort({
-      displayOrder: 1,
-    });
+    const fabricTypes = await FabricType.find({ isDeleted: false,}).sort({ displayOrder: 1,});
 
-    res.status(200).json({
-      success: true,
-      count: fabricTypes.length,
-      fabricTypes,
-    });
+    res.status(200).json({ success: true,count: fabricTypes.length,fabricTypes,});
 
-  } catch (error) {
+  } catch (error) { console.log(error);
 
-    console.log(error);
+    res.status(500).json({ success: false,message: "Server Error",});}};
 
-    res.status(500).json({
-      success: false,
-      message: "Server Error",
-    });
+   const getFabricTypeById = async (req, res) => {
 
-  }
-};
-const getFabricTypeById = async (req, res) => {
   try {
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid Fabric Type ID.",
-      });
-    }
+
+      return res.status(400).json({ success: false,message: "Invalid Fabric Type ID.",});}
 
     const fabricType = await FabricType.findById(req.params.id);
 
     if (!fabricType || fabricType.isDeleted) {
-      return res.status(404).json({
-        success: false,
-        message: "Fabric Type not found.",
-      });
-    }
 
-    res.status(200).json({
-      success: true,
-      fabricType,
-    });
+      return res.status(404).json({success: false, message: "Fabric Type not found.",});}
 
-  } catch (error) {
-    console.log(error);
+    res.status(200).json({ success: true,fabricType,});
 
-    res.status(500).json({
-      success: false,
-      message: "Server Error",
-    });
-  }
-};
+  } catch (error) { console.log(error);
 
-const updateFabricType = async (req, res) => {
+    res.status(500).json({ success: false,message: "Server Error",});}};
+
+  const updateFabricType = async (req, res) => {
   try {
 
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid Fabric Type ID.",
-      });
-    }
+
+      return res.status(400).json({ success: false,message: "Invalid Fabric Type ID.",});}
 
     const { name, displayOrder, isActive } = req.body;
 
     const fabricType = await FabricType.findById(req.params.id);
 
     if (!fabricType || fabricType.isDeleted) {
-      return res.status(404).json({
-        success: false,
-        message: "Fabric Type not found.",
-      });
-    }
+
+      return res.status(404).json({success: false,message: "Fabric Type not found.",});}
 
     fabricType.name = name || fabricType.name;
     fabricType.displayOrder = displayOrder ?? fabricType.displayOrder;
@@ -136,63 +79,34 @@ const updateFabricType = async (req, res) => {
 
     await fabricType.save();
 
-    res.status(200).json({
-      success: true,
-      message: "Fabric Type updated successfully.",
-      fabricType,
-    });
+    res.status(200).json({ success: true, message: "Fabric Type updated successfully.",fabricType,});
 
-  } catch (error) {
+  } catch (error) { console.log(error);
 
-    console.log(error);
+    res.status(500).json({ success: false, message: "Server Error",});}};
 
-    res.status(500).json({
-      success: false,
-      message: "Server Error",
-    });
-
-  }
-};
-
-const deleteFabricType = async (req, res) => {
+  const deleteFabricType = async (req, res) => {
   try {
 
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid Fabric Type ID.",
-      });
-    }
+
+      return res.status(400).json({ success: false, message: "Invalid Fabric Type ID.",});}
 
     const fabricType = await FabricType.findById(req.params.id);
 
     if (!fabricType || fabricType.isDeleted) {
-      return res.status(404).json({
-        success: false,
-        message: "Fabric Type not found.",
-      });
-    }
+
+      return res.status(404).json({success: false,message: "Fabric Type not found.",});}
 
     fabricType.isDeleted = true;
 
     await fabricType.save();
 
-    res.status(200).json({
-      success: true,
-      message: "Fabric Type deleted successfully.",
-    });
+    res.status(200).json({ success: true,message: "Fabric Type deleted successfully.",});
 
-  } catch (error) {
+  } catch (error) { console.log(error);
 
-    console.log(error);
-
-    res.status(500).json({
-      success: false,
-      message: "Server Error",
-    });
-
-  }
-};
+    res.status(500).json({ success: false,message: "Server Error",});}};
 
 module.exports = {
   createFabricType,
