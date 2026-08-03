@@ -94,25 +94,31 @@ totalReviews: {
 
 
     images: [
-      {
-        url: {
-          type: String,
-          required: true,
-          trim: true,
-        },
+  {
+    filename: {
+      type: String,
+      required: true,
+      trim: true,
+    },
 
-        alt: {
-          type: String,
-          default: "",
-          trim: true,
-        },
+    url: {
+      type: String,
+      required: true,
+      trim: true,
+    },
 
-        isPrimary: {
-          type: Boolean,
-          default: false,
-        },
-      },
-    ],
+    alt: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+
+    isPrimary: {
+      type: Boolean,
+      default: false,
+    },
+  },
+],
 
     description: {
       type: String,

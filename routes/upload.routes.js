@@ -1,12 +1,12 @@
 const express = require("express");
 const multer = require("multer");
 const router = express.Router();
-
 const upload = require("../middleware/upload.middleware");
+const { deleteUploadedImage,} = require("../controllers/upload.controller");
 
 router.post("/products", (req, res) => {
 
-  upload.array("images", 3)(req, res, (err) => {
+  upload.array("images", MAX_PRODUCT_IMAGES)(req, res, (err) => {
 
     // Multer Errors
     if (err instanceof multer.MulterError) {
@@ -22,7 +22,7 @@ router.post("/products", (req, res) => {
         case "LIMIT_UNEXPECTED_FILE":
           return res.status(400).json({
             success: false,
-            message: "Maximum 3 images are allowed.",
+            message: `Maximum ${MAX_PRODUCT_IMAGES} images are allowed.`,
           });
 
         default:
@@ -69,6 +69,6 @@ router.post("/products", (req, res) => {
 
 });
  
-    
+router.delete( "/products/:filename",deleteUploadedImage);
 
 module.exports = router;

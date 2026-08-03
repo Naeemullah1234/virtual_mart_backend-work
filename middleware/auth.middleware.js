@@ -1,3 +1,4 @@
+const Customer = require("../models/customer.model");
 const jwt = require("jsonwebtoken");
 
 const protect = async (req, res, next) => {
@@ -20,11 +21,27 @@ const protect = async (req, res, next) => {
 
             return res.status(401).json({ success: false, message: "Access Denied. No Token Provided.",});}
 
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-        req.user = decoded;
+     if (!decoded.id) {
+  return res.status(401).json({
+    success: false,
+    message: "Invalid Token.",
+  });
+}
 
-        next();
+     const customer = await Customer.findById(decoded.id).select("-password");
+
+if (!customer) {
+  return res.status(401).json({
+    success: false,
+    message: "Customer not found.",
+  });
+}
+
+req.user = customer;
+
+next();
 
         } catch (error) {
 
