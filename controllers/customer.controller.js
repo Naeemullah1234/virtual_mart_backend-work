@@ -80,9 +80,23 @@ const customer = await Customer.create({
   avatar: avatar || "",
 });
 
+res.status(201).json({
+  success: true,
+  message: "Customer registered successfully.",
+  customer: {
+    id: customer._id,
+    firstName: customer.firstName,
+    lastName: customer.lastName,
+    email: customer.email,
+    phone: customer.phone,
+    avatar: customer.avatar,
+    isEmailVerified: customer.isEmailVerified,
+    isPhoneVerified: customer.isPhoneVerified,
+    isActive: customer.isActive,
+  },
+});
 
 
-res.status(201).json({ success: true,message: "Customer registered successfully.",customer,});
 
   } catch (error) {
     console.log(error);
@@ -96,16 +110,8 @@ res.status(201).json({ success: true,message: "Customer registered successfully.
 
 const loginCustomer = async (req, res) => {
   try {
-
-    // --------------------------------
-    // Destructuring
-    // --------------------------------
-
-    const {
-      email,
-      phone,
-      password,
-    } = req.body;
+    
+  const { email,phone,password,} = req.body;
 
     // --------------------------------
 // Required Fields Validation
@@ -133,18 +139,12 @@ const normalizedPhone = phone
 // --------------------------------
 // Find Customer
 // --------------------------------
-
 const customer = await Customer.findOne({
   $or: [
-    ...(normalizedEmail
-      ? [{ email: normalizedEmail }]
-      : []),
-
-    ...(normalizedPhone
-      ? [{ phone: normalizedPhone }]
-      : []),
+    ...(normalizedEmail ? [{ email: normalizedEmail }] : []),
+    ...(normalizedPhone ? [{ phone: normalizedPhone }] : []),
   ],
-});
+}).select("+password");
 
 if (!customer) {
   return res.status(401).json({
@@ -269,10 +269,243 @@ const getCustomerProfile = async (req, res) => {
   }
 };
 
+// --------------------------------
+// Update Customer Profile
+// --------------------------------
+
+const updateCustomerProfile = async (req, res) => {
+  try {
+
+    const { firstName,lastName,avatar,} = req.body;
+
+    // --------------------------------
+// At Least One Field Required
+// --------------------------------
+
+if (
+  firstName === undefined &&
+  lastName === undefined &&
+  avatar === undefined
+) {
+  return res.status(400).json({
+    success: false,
+    message: "At least one field is required to update.",
+  });
+}
+
+// --------------------------------
+// First Name Validation
+// --------------------------------
+
+if (firstName !== undefined) {
+
+  const firstNameError = validateName(firstName, "First name");
+
+  if (firstNameError) {
+    return res.status(400).json({
+      success: false,
+      message: firstNameError,
+    });
+  }
+   req.user.firstName = firstName.trim();
+}
+
+
+// --------------------------------
+// Last Name Validation
+// --------------------------------
+
+if (lastName !== undefined) {
+
+  const lastNameError = validateName(lastName, "Last name");
+
+  if (lastNameError) {
+    return res.status(400).json({
+      success: false,
+      message: lastNameError,
+    });
+  }
+  req.user.lastName = lastName.trim();
+}
+
+if (avatar !== undefined) {
+  req.user.avatar = avatar;
+}
+
+await req.user.save();
+
+res.status(200).json({
+  success: true,
+  message: "Profile updated successfully.",
+  customer: {
+    id: req.user._id,
+    firstName: req.user.firstName,
+    lastName: req.user.lastName,
+    email: req.user.email,
+    phone: req.user.phone,
+    avatar: req.user.avatar,
+    isEmailVerified: req.user.isEmailVerified,
+    isPhoneVerified: req.user.isPhoneVerified,
+    isActive: req.user.isActive,
+  },
+});
+
+
+// --------------------------------
+
+
+  } catch (error) {
+    console.log(error);
+
+    res.status(500).json({
+      success: false,
+      message: "Server Error",
+    });
+  }
+};
+
+// --------------------------------
+// Change Customer Password
+// --------------------------------
+
+const changeCustomerPassword = async (req, res) => {
+  try {
+
+    const {
+      currentPassword,
+      newPassword,
+    } = req.body;
+
+    // --------------------------------
+// Required Fields Validation
+// --------------------------------
+
+if (!currentPassword || !newPassword) {
+  return res.status(400).json({
+    success: false,
+    message: "Current password and new password are required.",
+  });
+}
+
+// --------------------------------
+// New Password Validation
+// --------------------------------
+
+const passwordError = validatePassword(newPassword);
+
+if (passwordError) {
+  return res.status(400).json({
+    success: false,
+    message: passwordError,
+  });
+}
+
+// --------------------------------
+// Get Customer With Password
+// --------------------------------
+
+const customer = await Customer.findById(req.user._id).select("+password");
+
+if (!customer) {
+  return res.status(404).json({
+    success: false,
+    message: "Customer not found.",
+  });
+}
+
+// --------------------------------
+// Verify Current Password
+// --------------------------------
+
+const isPasswordCorrect = await bcrypt.compare(
+  currentPassword,
+  customer.password
+);
+
+if (!isPasswordCorrect) {
+  return res.status(400).json({
+    success: false,
+    message: "Current password is incorrect.",
+  });
+}
+
+// --------------------------------
+// Prevent Same Password
+// --------------------------------
+
+const isSamePassword = await bcrypt.compare(
+  newPassword,
+  customer.password
+);
+
+if (isSamePassword) {
+  return res.status(400).json({
+    success: false,
+    message: "New password must be different from current password.",
+  });
+}
+
+// --------------------------------
+// Hash New Password
+// --------------------------------
+
+const salt = await bcrypt.genSalt(10);
+
+customer.password = await bcrypt.hash(newPassword, salt);
+
+customer.loginAttempts = 0;
+customer.lockUntil = null;
+
+await customer.save();
+
+res.status(200).json({
+  success: true,
+  message: "Password changed successfully.",
+});
+
+  } catch (error) {
+    console.log(error);
+
+    res.status(500).json({
+      success: false,
+      message: "Server Error",
+    });
+  }
+};
+
+// --------------------------------
+// Logout Customer
+// --------------------------------
+
+const logoutCustomer = async (req, res) => {
+  try {
+
+    req.user.refreshToken = null;
+
+    await req.user.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Logged out successfully.",
+    });
+
+  } catch (error) {
+    console.log(error);
+
+    res.status(500).json({
+      success: false,
+      message: "Server Error",
+    });
+  }
+};
+
 
 
 module.exports = {
   registerCustomer,
   loginCustomer,
   getCustomerProfile,
+  updateCustomerProfile,
+  changeCustomerPassword,
+   logoutCustomer,
 };

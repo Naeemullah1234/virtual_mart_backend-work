@@ -4,8 +4,7 @@ const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const phoneRegex = /^\+[1-9]\d{7,14}$/;
 
-const passwordRegex =
-  /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,100}$/;
+const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&^#()_\-+=])[A-Za-z\d@$!%*?&^#()_\-+=]{8,64}$/;
 
 
   // --------------------------------
@@ -71,12 +70,12 @@ const validatePhone = (phone) => {
 // --------------------------------             
 
 const validatePassword = (password) => {
-  if (!password || password.trim() === "") {
+  if (!password) {
     return "Password is required.";
   }
 
   if (!passwordRegex.test(password)) {
-    return "Password must be at least 8 characters long and include at least one uppercase letter, one lowercase letter, one number, and one special character.";
+    return "Password must be 8-64 characters long and include at least one uppercase letter, one lowercase letter, one number, and one special character.";
   }
 
   return null;

@@ -4,6 +4,7 @@ const uploadRoutes = require("./upload.routes");
 
 router.use("/auth", require("./auth.routes"));
 router.use("/customers", require("./customer.routes"));
+router.use("/addresses", require("./address.routes"));
 router.use("/categories", require("./category.routes"));
 router.use("/sub-categories", require("./subCategory.routes"));
 router.use("/fabric-types", require("./fabricType.routes"));
