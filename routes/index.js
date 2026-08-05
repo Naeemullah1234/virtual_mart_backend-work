@@ -13,5 +13,6 @@ router.use("/seasons", require("./season.routes"));
 router.use("/product-types", require("./productType.routes"));
 router.use("/products", require("./product.routes"));
 router.use("/upload", uploadRoutes);
+router.use("/cart", require("./cart.routes"));
 
 module.exports = router;

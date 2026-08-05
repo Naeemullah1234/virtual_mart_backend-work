@@ -1,6 +1,6 @@
 const jwt = require("jsonwebtoken");
 const User = require("../models/user.model");
-
+const { validateName,validateEmail,validatePhone,validatePassword,} = require("../validators/customer.validator");
 
 
 const registerUser = async (req, res) => {
@@ -12,6 +12,63 @@ const registerUser = async (req, res) => {
       {
 
       return res.status(400).json({success: false, message: "Please fill all required fields.",});}
+
+      // --------------------------------
+// First Name Validation
+// --------------------------------
+
+const firstNameError = validateName(firstName, "First name");
+
+if (firstNameError) {
+  return res.status(400).json({
+    success: false,
+    message: firstNameError,
+  });
+}
+
+// --------------------------------
+// Email Validation
+// --------------------------------
+
+const emailError = validateEmail(email);
+
+if (emailError) {
+  return res.status(400).json({
+    success: false,
+    message: emailError,
+  });
+}
+
+// --------------------------------
+// Phone Validation (optional agar phone required hai)
+// --------------------------------
+
+if (phone) {
+  const phoneError = validatePhone(phone);
+
+  if (phoneError) {
+    return res.status(400).json({
+      success: false,
+      message: phoneError,
+    });
+  }
+}
+
+// --------------------------------
+// Password Validation
+// --------------------------------
+
+console.log("Password:", password);
+console.log("Validation Result:", validatePassword(password));
+
+const passwordError = validatePassword(password);
+
+if (passwordError) {
+  return res.status(400).json({
+    success: false,
+    message: passwordError,
+  });
+}
 
     
     const existingUser = await User.findOne({ email });

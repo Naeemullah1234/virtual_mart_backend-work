@@ -3,67 +3,29 @@ const bcrypt = require("bcryptjs");
 
 const userSchema = new mongoose.Schema(
   {
-    firstName: {
-      type: String,
-      required: true,
-      trim: true,
-    },
+    firstName: {type: String, required: true, trim: true,},
 
-    lastName: {
-      type: String,
-      required: true,
-      trim: true,
-    },
+    lastName: { type: String, required: true, trim: true,},
 
-    email: {
-      type: String,
-      required: true,
-      unique: true,
-      lowercase: true,
-      trim: true,
-    },
+    email: { type: String, required: true, unique: true,lowercase: true, trim: true,},
 
-    phone: {
-      type: String,
-      default: "",
-    },
+    phone: { type: String, default: "",},
 
-    password: {
-      type: String,
-      required: true,
-      minlength: 6,
-    },
+    password: { type: String, required: true, minlength: 8,},
 
-    avatar: {
-      type: String,
-      default: "",
-    },
+    avatar: { type: String,default: "",},
 
-    role: {
-      type: String,
-      enum: ["customer", "admin"],
-      default: "customer",
-    },
+    role: { type: String,enum: ["customer", "admin"], default: "customer",},
 
-    isVerified: {
-      type: Boolean,
-      default: false,
-    },
+    isVerified: { type: Boolean, default: false,},
 
-    isBlocked: {
-      type: Boolean,
-      default: false,
-    },
+    isBlocked: { type: Boolean, default: false, },
 
-    refreshToken: {
-      type: String,
-      default: "",
-    },
+    refreshToken: { type: String, default: "",},
 
-    lastLogin: {
-      type: Date,
-    },
-  },
+    lastLogin: { type: Date, default: null,},
+
+   },
   {
     timestamps: true,
   }
