@@ -51,14 +51,27 @@ next();
         
       return (req, res, next) => {
 
-        if (!roles.includes(req.user.role)) {
-            return res.status(403).json({
-                success: false,
-                message: "Access Denied."
-            });
-        }
+        const authorize = (...roles) => {
+  return (req, res, next) => {
 
-        next();
+    // Development Mode
+    if (process.env.ENABLE_ADMIN_AUTH === "false") {
+      return next();
+    }
+
+    // Production Mode
+    if (!roles.includes(req.user.role)) {
+      return res.status(403).json({
+        success: false,
+        message: "Access Denied. You are not authorized to perform this action."
+      });
+    }
+
+    next();
+  };
+};
+
+  
     };
 };
 

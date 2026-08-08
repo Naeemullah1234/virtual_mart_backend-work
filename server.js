@@ -7,30 +7,23 @@ const cors = require("cors");
 const connectDB = require("./config/db");
 const cron = require("node-cron");
 const cleanupOrphanImages = require("./utils/cleanupOrphanImages");
-
+const routes = require("./routes");
 
 dotenv.config();
 connectDB();
 
 const app = express();
 
-app.use( "/uploads",express.static(path.join(__dirname, "uploads")));
-
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-
-const routes = require("./routes");
-
+app.use( "/uploads",express.static(path.join(__dirname, "uploads")));
 app.use("/api", routes);
 
 
 app.use((req, res) => {
   res.status(404).json({success: false,message: "API Not Found",});});
 
-  // --------------------------------
-// Daily Cleanup Orphan Images
-// --------------------------------
 
 cron.schedule(
   "0 2 * * *",
