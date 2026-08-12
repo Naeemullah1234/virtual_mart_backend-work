@@ -47,16 +47,22 @@ next();
 
         return res.status(401).json({success: false, message: "Invalid Token.", }); }};
 
-      const authorize = (...roles) => {
-        
-      return (req, res, next) => {
+   
 
         const authorize = (...roles) => {
-  return (req, res, next) => {
+         return (req, res, next) => {
 
     // Development Mode
     if (process.env.ENABLE_ADMIN_AUTH === "false") {
       return next();
+    }
+
+     // User check
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        message: "User not authenticated.",
+      });
     }
 
     // Production Mode
@@ -71,9 +77,7 @@ next();
   };
 };
 
-  
-    };
-};
+
 
 module.exports = {
     protect,

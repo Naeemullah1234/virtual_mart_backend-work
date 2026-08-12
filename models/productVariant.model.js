@@ -23,6 +23,9 @@ const productVariantSchema = new mongoose.Schema(
       unique: true,
       trim: true,
       uppercase: true,
+      minlength: 3,
+      maxlength: 50,
+      
     },
 
     // --------------------------------

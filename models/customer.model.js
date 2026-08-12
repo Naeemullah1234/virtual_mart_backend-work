@@ -25,6 +25,8 @@ const customerSchema = new mongoose.Schema(
     
   isActive: { type: Boolean, default: true,},
 
+  role: { type: String,enum: ["customer", "admin"],default: "customer"},
+
    loginAttempts: { type: Number, default: 0,},
 
   lockUntil: { type: Date, default: null,},
