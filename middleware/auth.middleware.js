@@ -1,63 +1,66 @@
-const Customer = require("../models/customer.model");
+const User = require("../models/user.model");
 const jwt = require("jsonwebtoken");
 
 const protect = async (req, res, next) => {
+  try {
+    let token;
 
-    try {
+    if (
+      req.headers.authorization &&
+      req.headers.authorization.startsWith("Bearer")
+    ) {
+      token = req.headers.authorization.split(" ")[1];
+    }
 
-        let token;
+    if (!token) {
+      return res.status(401).json({
+        success: false,
+        message: "Access Denied. No Token Provided.",
+      });
+    }
 
-        if (
-            req.headers.authorization &&
-            req.headers.authorization.startsWith("Bearer")) 
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-            {
+    if (!decoded.id) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid Token.",
+      });
+    }
 
-            token = req.headers.authorization.split(" ")[1];
+    const user = await User.findById(decoded.id).select("-password");
 
-        }
+    console.log("USER FOUND:", user);
 
-        if (!token) {
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: "User not found.",
+      });
+    }
 
-            return res.status(401).json({ success: false, message: "Access Denied. No Token Provided.",});}
+    req.user = user;
 
-     const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    next();
 
-     if (!decoded.id) {
-  return res.status(401).json({
-    success: false,
-    message: "Invalid Token.",
-  });
-}
+  } catch (error) {
+    console.log(error);
 
-     const customer = await Customer.findById(decoded.id).select("-password");
+    return res.status(401).json({
+      success: false,
+      message: "Invalid Token.",
+    });
+  }
+};
 
-if (!customer) {
-  return res.status(401).json({
-    success: false,
-    message: "Customer not found.",
-  });
-}
 
-req.user = customer;
+const authorize = (...roles) => {
+  return (req, res, next) => {
 
-next();
-
-        } catch (error) {
-
-        return res.status(401).json({success: false, message: "Invalid Token.", }); }};
-
-   
-
-        const authorize = (...roles) => {
-         return (req, res, next) => {
-
-    // Development Mode
     if (process.env.ENABLE_ADMIN_AUTH === "false") {
       return next();
     }
 
-     // User check
     if (!req.user) {
       return res.status(401).json({
         success: false,
@@ -65,11 +68,10 @@ next();
       });
     }
 
-    // Production Mode
     if (!roles.includes(req.user.role)) {
       return res.status(403).json({
         success: false,
-        message: "Access Denied. You are not authorized to perform this action."
+        message: "Access Denied. You are not authorized to perform this action.",
       });
     }
 
@@ -78,8 +80,7 @@ next();
 };
 
 
-
 module.exports = {
-    protect,
-    authorize,
+  protect,
+  authorize,
 };

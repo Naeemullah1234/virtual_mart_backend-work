@@ -1,15 +1,17 @@
+const dotenv = require("dotenv");
+dotenv.config();
 const express = require("express");
 const dns = require("dns");
 dns.setServers(["8.8.8.8", "8.8.4.4"]);
 const path = require("path");
-const dotenv = require("dotenv");
 const cors = require("cors");
 const connectDB = require("./config/db");
 const cron = require("node-cron");
 const cleanupOrphanImages = require("./utils/cleanupOrphanImages");
 const routes = require("./routes");
+const adminRoutes = require("./routes/admin.routes");
 
-dotenv.config();
+
 connectDB();
 
 const app = express();
@@ -18,6 +20,7 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use( "/uploads",express.static(path.join(__dirname, "uploads")));
+app.use("/api/admins", adminRoutes);
 app.use("/api", routes);
 
 

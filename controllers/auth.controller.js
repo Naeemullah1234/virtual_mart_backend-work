@@ -13,22 +13,17 @@ const registerUser = async (req, res) => {
 
       return res.status(400).json({success: false, message: "Please fill all required fields.",});}
 
-      // --------------------------------
-// First Name Validation
-// --------------------------------
 
-const firstNameError = validateName(firstName, "First name");
+     const firstNameError = validateName(firstName, "First name");
 
-if (firstNameError) {
-  return res.status(400).json({
+    if (firstNameError) {
+    return res.status(400).json({
     success: false,
     message: firstNameError,
   });
-}
+ }
 
-// --------------------------------
-// Email Validation
-// --------------------------------
+
 
 const emailError = validateEmail(email);
 
@@ -39,9 +34,6 @@ if (emailError) {
   });
 }
 
-// --------------------------------
-// Phone Validation (optional agar phone required hai)
-// --------------------------------
 
 if (phone) {
   const phoneError = validatePhone(phone);
@@ -54,12 +46,6 @@ if (phone) {
   }
 }
 
-// --------------------------------
-// Password Validation
-// --------------------------------
-
-console.log("Password:", password);
-console.log("Validation Result:", validatePassword(password));
 
 const passwordError = validatePassword(password);
 

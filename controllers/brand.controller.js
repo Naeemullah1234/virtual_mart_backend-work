@@ -1,7 +1,7 @@
 const Brand = require("../models/brand.model");
 const mongoose = require("mongoose");
 
-// Create Brand
+
 const createBrand = async (req, res) => {
   try {
     const { name, displayOrder } = req.body;

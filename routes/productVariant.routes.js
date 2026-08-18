@@ -10,8 +10,8 @@ const { createProductVariant,getProductVariants,updateProductVariant,deleteProdu
 router.post("/",protect,authorize("admin"),createProductVariant);
 router.get("/filters",protect,getProductVariantFilters);
 router.get("/:productId",protect,getProductVariants);
-router.put("/:variantId",protect,updateProductVariant);
-router.delete("/:variantId",protect,deleteProductVariant);
+router.put("/:variantId",protect,authorize("admin"),updateProductVariant);
+router.delete("/:variantId",protect,authorize("admin"),deleteProductVariant);
 router.patch( "/:variantId/restore",protect,authorize("admin"),restoreProductVariant);
 router.get("/",protect,getAllProductVariants);
 router.get("/single/:variantId",protect,getProductVariantById);

@@ -104,8 +104,7 @@ else {
 
 await cart.save();
 
-// Success Response
-// --------------------------------
+
 
 return res.status(200).json({
   success: true,
