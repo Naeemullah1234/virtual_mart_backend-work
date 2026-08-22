@@ -8,9 +8,6 @@ const phoneRegex = /^\+[1-9]\d{7,14}$/;
 const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&.#^()_\-+=])[A-Za-z\d@$!%*?&.#^()_\-+=]{8,64}$/;
 
 
-  // --------------------------------
-// Validate Name
-// --------------------------------
 
 const validateName = (name, fieldName) => {
 
@@ -28,9 +25,7 @@ const validateName = (name, fieldName) => {
 
 };
 
-// --------------------------------
-// Validate Email
-// --------------------------------
+
 
 const validateEmail = (email) => {
 
@@ -48,9 +43,7 @@ const validateEmail = (email) => {
 
 };
 
-// --------------------------------
-// Validate Phone
-// --------------------------------
+
 
 const validatePhone = (phone) => {
   if (!phone || phone.trim() === "") {
@@ -66,9 +59,7 @@ const validatePhone = (phone) => {
   return null;
 };
 
-// --------------------------------
-// Validate Password
-// --------------------------------             
+         
 
 const validatePassword = (password) => {
   if (!password) {

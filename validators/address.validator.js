@@ -7,9 +7,7 @@ const phoneRegex = /^\+[1-9]\d{7,14}$/;
 const postalCodeRegex = /^[A-Za-z0-9\s-]{3,12}$/;
 
 
-// --------------------------------
-// Full Name Validation
-// --------------------------------
+
 
 const validateFullName = (fullName) => {
 
@@ -25,9 +23,7 @@ const validateFullName = (fullName) => {
 };
 
 
-// --------------------------------
-// Phone Validation
-// --------------------------------
+
 
 const validatePhone = (phone) => {
 
@@ -42,9 +38,7 @@ const validatePhone = (phone) => {
   return null;
 };
 
-// --------------------------------
-// Optional Email Validation
-// --------------------------------
+
 
 const validateOptionalEmail = (email) => {
   if (!email) return null;
@@ -54,12 +48,7 @@ const validateOptionalEmail = (email) => {
 
 const validateLabel = (label) => {
 
-  const allowedLabels = [
-    "Home",
-    "Office",
-    "Warehouse",
-    "Other",
-  ];
+  const allowedLabels = [ "Home","Office","Warehouse","Other",];
 
   if (!allowedLabels.includes(label)) {
     return "Invalid address label.";
@@ -68,9 +57,7 @@ const validateLabel = (label) => {
   return null;
 };
 
-// --------------------------------
-// Required Text Validation
-// --------------------------------
+
 
 const validateRequiredText = (value, fieldName) => {
 
@@ -82,9 +69,6 @@ const validateRequiredText = (value, fieldName) => {
 };
 
 
-// --------------------------------
-// Postal Code Validation
-// --------------------------------
 
 const validatePostalCode = (postalCode) => {
 
@@ -100,9 +84,6 @@ const validatePostalCode = (postalCode) => {
 };
 
 
-// --------------------------------
-// Exports
-// --------------------------------
 
 module.exports = {
   validateFullName,

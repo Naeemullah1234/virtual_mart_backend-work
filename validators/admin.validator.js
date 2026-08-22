@@ -1,6 +1,3 @@
-// --------------------------------
-// Name Validation
-// --------------------------------
 
 const nameRegex = /^[A-Za-z\s'-]+$/;
 
@@ -17,9 +14,6 @@ const validateName = (name, fieldName = "Name") => {
 };
 
 
-// --------------------------------
-// Email Validation
-// --------------------------------
 
 const emailRegex =
   /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -37,9 +31,6 @@ const validateEmail = (email) => {
 };
 
 
-// --------------------------------
-// Phone Validation
-// --------------------------------
 
 const phoneRegex =
   /^\+?[0-9]{10,15}$/;
@@ -57,9 +48,6 @@ const validatePhone = (phone) => {
 };
 
 
-// --------------------------------
-// Password Validation
-// --------------------------------
 
 const passwordRegex =
   /^(?=.*[0-9])(?=.*[!@#$%^&*])[A-Za-z0-9!@#$%^&*]{8,}$/;
@@ -77,9 +65,6 @@ const validatePassword = (password) => {
 };
 
 
-// --------------------------------
-// Is Blocked Validation
-// --------------------------------
 
 const validateIsBlocked = (isBlocked) => {
   if (typeof isBlocked !== "boolean") {
@@ -90,9 +75,6 @@ const validateIsBlocked = (isBlocked) => {
 };
 
 
-// --------------------------------
-// Export
-// --------------------------------
 
 module.exports = {
   nameRegex,

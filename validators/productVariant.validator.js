@@ -1,6 +1,4 @@
-// --------------------------------
-// SKU Validation
-// --------------------------------
+
 
 const validateSKU = (sku) => {
 
@@ -25,9 +23,6 @@ const validateSKU = (sku) => {
   return null;
 };
 
-// --------------------------------
-// Price Validation
-// --------------------------------
 
 const validatePrice = (price) => {
 
@@ -46,13 +41,11 @@ const validatePrice = (price) => {
   return null;
 };
 
-// --------------------------------
-// Sale Price Validation
-// --------------------------------
+
 
 const validateSalePrice = (price, salePrice) => {
 
-  // Sale price optional hai
+
   if (salePrice === undefined || salePrice === null) {
     return null;
   }
@@ -72,9 +65,7 @@ const validateSalePrice = (price, salePrice) => {
   return null;
 };
 
-// --------------------------------
-// Stock Validation
-// --------------------------------
+
 
 const validateStock = (stock) => {
 
@@ -93,23 +84,17 @@ const validateStock = (stock) => {
   return null;
 };
 
-// --------------------------------
-// Attributes Validation
-// --------------------------------
+
 
 const validateAttributes = (attributes) => {
 
-  // --------------------------------
-  // Array Validation
-  // --------------------------------
+
 
   if (!Array.isArray(attributes) || attributes.length === 0) {
     return "At least one attribute is required.";
   }
 
-  // --------------------------------
-  // Attribute Validation
-  // --------------------------------
+  
 
   for (const attribute of attributes) {
 
@@ -133,9 +118,6 @@ const validateAttributes = (attributes) => {
 
   }
 
-  // --------------------------------
-  // Duplicate Attribute Key Validation
-  // --------------------------------
 
   const keys = attributes.map((attribute) =>
     attribute.key.trim().toLowerCase()
@@ -161,17 +143,16 @@ const normalizeAttributes = (attributes) => {
 
 const validateImages = (images) => {
 
-  // Images optional hain
   if (images === undefined || images === null) {
     return null;
   }
 
-  // Array honi chahiye
+
   if (!Array.isArray(images)) {
     return "Images must be an array.";
   }
 
-  // Har image string honi chahiye
+
   for (const image of images) {
 
     if (typeof image !== "string" || !image.trim()) {

@@ -76,7 +76,7 @@ const createAdmin = async (req, res) => {
 
     const admin = await Admin.create({ firstName: firstName.trim(), lastName: lastName.trim(), email: normalizedEmail,
 
-      phone: normalizedPhone, password: hashedPassword, avatar: avatar || "", role: "admin", isVerified: false, otp, otpExpiresAt, });
+      phone: normalizedPhone, password: hashedPassword, avatar: avatar || "", role: "admin", isVerified: false, otp, otpExpiresAt,  otpPurpose: "verification", });
 
 
     try {
@@ -207,57 +207,1081 @@ const resendAdminOTP = async (req, res) => {
 
     return res.status(500).json({ success: false, message: "Server Error",});}};
 
-const loginAdmin = async (req, res) => {
+
+   const loginAdmin = async (req, res) => {
   try {
 
     const { email, password } = req.body;
 
-    if (!email || !password) {
-      return res.status(400).json({ success: false,message: "Email and password are required.",});}
+    // --------------------------------
+    // Required Fields
+    // --------------------------------
 
+    if (!email || !password) {
+      return res.status(400).json({
+        success: false,
+        message: "Email and password are required.",
+      });
+    }
+
+    // --------------------------------
+    // Normalize Email
+    // --------------------------------
 
     const normalizedEmail = email.trim().toLowerCase();
 
+    // --------------------------------
+    // Find Admin
+    // --------------------------------
 
-    const admin = await Admin.findOne({ email: normalizedEmail,});
+    const admin = await Admin.findOne({
+      email: normalizedEmail,
+    });
 
     if (!admin) {
-      return res.status(401).json({ success: false,message: "Invalid email or password.",});}
+      return res.status(401).json({
+        success: false,
+        message: "Invalid email or password.",
+      });
+    }
 
+    // --------------------------------
+    // Email Verification
+    // --------------------------------
 
     if (!admin.isVerified) {
-      return res.status(403).json({ success: false,message: "Please verify your email before logging in.",});}
+      return res.status(403).json({
+        success: false,
+        message: "Please verify your email before logging in.",
+      });
+    }
 
+    // --------------------------------
+    // Block Check
+    // --------------------------------
 
     if (admin.isBlocked) {
-      return res.status(403).json({ success: false, message: "Your admin account has been blocked.", });}
+      return res.status(403).json({
+        success: false,
+        message: "Your admin account has been blocked.",
+      });
+    }
 
+    // --------------------------------
+    // Password Check
+    // --------------------------------
 
-    const passwordMatch = await bcrypt.compare( password,admin.password);
+    const passwordMatch = await bcrypt.compare(
+      password,
+      admin.password
+    );
 
     if (!passwordMatch) {
-      return res.status(401).json({ success: false, message: "Invalid email or password.",});}
+      return res.status(401).json({
+        success: false,
+        message: "Invalid email or password.",
+      });
+    }
 
-   
-    const token = jwt.sign( { id: admin._id, role: "admin",}, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN || "1d",});
+    // --------------------------------
+    // Access Token
+    // --------------------------------
 
+    const accessToken = jwt.sign(
+      {
+        id: admin._id,
+        role: "admin",
+        tokenVersion: admin.tokenVersion,
+      },
+      process.env.JWT_SECRET,
+      {
+        expiresIn: "15m",
+      }
+    );
+
+    // --------------------------------
+    // Refresh Token
+    // --------------------------------
+
+    const refreshToken = jwt.sign(
+      {
+        id: admin._id,
+        role: "admin",
+      },
+      process.env.JWT_REFRESH_SECRET,
+      {
+        expiresIn: "7d",
+      }
+    );
+
+    
+console.log(
+  "REFRESH SECRET EXISTS:",
+  !!process.env.JWT_REFRESH_SECRET
+);
+
+console.log(
+  "REFRESH SECRET:",
+  process.env.JWT_REFRESH_SECRET
+);
+    // --------------------------------
+    // Save Refresh Token
+    // --------------------------------
+
+    admin.refreshToken = refreshToken;
 
     admin.lastLogin = new Date();
 
     await admin.save();
 
+    // --------------------------------
+    // Response
+    // --------------------------------
 
+    return res.status(200).json({
+      success: true,
+      message: "Admin login successful.",
 
-    return res.status(200).json({ success: true,message: "Admin login successful.",token,
+      accessToken,
 
-      admin: { id: admin._id, firstName: admin.firstName, lastName: admin.lastName, email: admin.email,
+      refreshToken,
 
-        phone: admin.phone, avatar: admin.avatar, role: admin.role, isVerified: admin.isVerified, lastLogin: admin.lastLogin,},});
+      admin: {
+        id: admin._id,
+        firstName: admin.firstName,
+        lastName: admin.lastName,
+        email: admin.email,
+        phone: admin.phone,
+        avatar: admin.avatar,
+        role: admin.role,
+        isVerified: admin.isVerified,
+        lastLogin: admin.lastLogin,
+      },
+    });
 
   } catch (error) {
 
-    console.log(error);
+    console.log("ADMIN LOGIN ERROR:", error);
 
-    return res.status(500).json({success: false, message: "Server Error", }); }};
+    return res.status(500).json({
+      success: false,
+      message: "Server Error.",
+    });
+  }
+};
 
-module.exports = { createAdmin,verifyAdminOTP,resendAdminOTP,loginAdmin,};
+
+    const getAdminProfile = async (req, res) => {
+  try {
+
+    return res.status(200).json({
+      success: true,
+      admin: req.admin,
+    });
+
+  } catch (error) {
+
+    console.log("GET ADMIN PROFILE ERROR:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Server Error",
+    });
+
+  }
+};
+
+const logoutAdmin = async (req, res) => {
+  try {
+
+    // Admin protect middleware se aayega
+    const adminId = req.user._id;
+
+    const admin = await Admin.findById(adminId);
+
+    if (!admin) {
+      return res.status(404).json({
+        success: false,
+        message: "Admin not found.",
+      });
+    }
+
+    // --------------------------------
+    // Invalidate Refresh Token
+    // --------------------------------
+
+    admin.refreshToken = "";
+
+    await admin.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Admin logged out successfully.",
+    });
+
+  } catch (error) {
+
+    console.log("ADMIN LOGOUT ERROR:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Server Error.",
+    });
+  }
+};
+
+const refreshAdminToken = async (req, res) => {
+  try {
+
+    const { refreshToken } = req.body;
+
+    // --------------------------------
+    // Refresh Token Required
+    // --------------------------------
+
+    if (!refreshToken) {
+      return res.status(401).json({
+        success: false,
+        message: "Refresh token is required.",
+      });
+    }
+
+    // --------------------------------
+    // Verify Refresh Token
+    // --------------------------------
+
+    const decoded = jwt.verify(
+      refreshToken,
+      process.env.JWT_REFRESH_SECRET
+    );
+
+    // --------------------------------
+    // Find Admin
+    // --------------------------------
+
+    const admin = await Admin.findOne({
+      _id: decoded.id,
+      refreshToken: refreshToken,
+      isVerified: true,
+      isBlocked: false,
+    });
+
+    if (!admin) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid refresh token.",
+      });
+    }
+
+    // --------------------------------
+    // Generate New Access Token
+    // --------------------------------
+
+    const accessToken = jwt.sign(
+      {
+        id: admin._id,
+        role: "admin",
+      },
+      process.env.JWT_SECRET,
+      {
+        expiresIn: "15m",
+      }
+    );
+
+    // --------------------------------
+    // Generate NEW Refresh Token
+    // --------------------------------
+
+    const newRefreshToken = jwt.sign(
+      {
+        id: admin._id,
+        role: "admin",
+         tokenVersion: admin.tokenVersion,
+      },
+      process.env.JWT_REFRESH_SECRET,
+      {
+        expiresIn: "7d",
+      }
+    );
+
+    // --------------------------------
+    // Replace Old Refresh Token
+    // --------------------------------
+
+    admin.refreshToken = newRefreshToken;
+
+    await admin.save();
+
+    // --------------------------------
+    // Response
+    // --------------------------------
+
+    return res.status(200).json({
+      success: true,
+      message: "Token refreshed successfully.",
+
+      accessToken,
+
+      refreshToken: newRefreshToken,
+    });
+
+  } catch (error) {
+
+    console.log(
+      "REFRESH TOKEN ERROR:",
+      error
+    );
+
+    return res.status(401).json({
+      success: false,
+      message: "Invalid or expired refresh token.",
+    });
+  }
+};
+
+
+
+
+const forgotAdminPassword = async (req, res) => {
+  try {
+
+    const { email } = req.body;
+
+    // --------------------------------
+    // Email Required
+    // --------------------------------
+
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: "Email is required.",
+      });
+    }
+
+    // --------------------------------
+    // Normalize Email
+    // --------------------------------
+
+    const normalizedEmail = email.trim().toLowerCase();
+
+    // --------------------------------
+    // Find Admin
+    // --------------------------------
+
+    const admin = await Admin.findOne({
+      email: normalizedEmail,
+    });
+
+    if (!admin) {
+      return res.status(404).json({
+        success: false,
+        message: "Admin not found.",
+      });
+    }
+
+    // --------------------------------
+    // Block Check
+    // --------------------------------
+
+    if (admin.isBlocked) {
+      return res.status(403).json({
+        success: false,
+        message: "Your admin account has been blocked.",
+      });
+    }
+
+    // --------------------------------
+    // Generate OTP
+    // --------------------------------
+
+    const otp = generateOTP();
+
+    // --------------------------------
+    // OTP Expiry
+    // --------------------------------
+
+    const otpExpiresAt = new Date(
+      Date.now() + 10 * 60 * 1000
+    );
+
+    // --------------------------------
+    // Save OTP
+    // --------------------------------
+
+    admin.otp = otp;
+    admin.otpExpiresAt = otpExpiresAt;
+    admin.otpPurpose = "forgotPassword";
+
+    await admin.save();
+
+    // --------------------------------
+    // Send OTP Email
+    // --------------------------------
+
+    try {
+
+      await sendOTPEmail(
+        admin.email,
+        otp
+      );
+
+    } catch (emailError) {
+
+      console.log(
+        "FORGOT PASSWORD OTP EMAIL ERROR:",
+        emailError
+      );
+
+      // Remove OTP if email failed
+
+      admin.otp = null;
+      admin.otpExpiresAt = null;
+      admin.otpPurpose = null;
+
+      await admin.save();
+
+      return res.status(500).json({
+        success: false,
+        message: "OTP email could not be sent.",
+      });
+    }
+
+    // --------------------------------
+    // Response
+    // --------------------------------
+
+    return res.status(200).json({
+      success: true,
+      message: "OTP has been sent to your email.",
+    });
+
+  } catch (error) {
+
+    console.log(
+      "FORGOT ADMIN PASSWORD ERROR:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message: "Server Error",
+    });
+  }
+};
+
+const verifyForgotPasswordOTP = async (req, res) => {
+  try {
+
+    const { email, otp } = req.body;
+
+    // --------------------------------
+    // Required Fields
+    // --------------------------------
+
+    if (!email || !otp) {
+      return res.status(400).json({
+        success: false,
+        message: "Email and OTP are required.",
+      });
+    }
+
+    // --------------------------------
+    // Normalize Email
+    // --------------------------------
+
+    const normalizedEmail = email.trim().toLowerCase();
+
+    const normalizedOTP = String(otp).trim();
+
+    // --------------------------------
+    // Find Admin
+    // --------------------------------
+
+    const admin = await Admin.findOne({
+      email: normalizedEmail,
+    });
+
+    if (!admin) {
+      return res.status(404).json({
+        success: false,
+        message: "Admin not found.",
+      });
+    }
+
+    // --------------------------------
+    // Block Check
+    // --------------------------------
+
+    if (admin.isBlocked) {
+      return res.status(403).json({
+        success: false,
+        message: "Your admin account has been blocked.",
+      });
+    }
+
+    // --------------------------------
+    // OTP Purpose Check
+    // --------------------------------
+
+    if (admin.otpPurpose !== "forgotPassword") {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid OTP request.",
+      });
+    }
+
+    // --------------------------------
+    // OTP Exists Check
+    // --------------------------------
+
+    if (!admin.otp || !admin.otpExpiresAt) {
+      return res.status(400).json({
+        success: false,
+        message: "OTP not found. Please request a new OTP.",
+      });
+    }
+
+    // --------------------------------
+    // OTP Expiry Check
+    // --------------------------------
+
+    if (new Date() > admin.otpExpiresAt) {
+      
+      admin.otp = null;
+      admin.otpExpiresAt = null;
+      admin.otpPurpose = null;
+
+      await admin.save();
+
+      return res.status(400).json({
+        success: false,
+        message: "OTP has expired. Please request a new OTP.",
+      });
+    }
+
+    // --------------------------------
+    // OTP Match Check
+    // --------------------------------
+
+    if (admin.otp !== normalizedOTP) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid OTP.",
+      });
+    }
+
+    admin.otp = null;
+admin.otpExpiresAt = null;
+admin.otpPurpose = "forgotPasswordVerified";
+
+await admin.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "OTP verified successfully. You can now reset your password.",
+    });
+
+  } catch (error) {
+
+    console.log(
+      "VERIFY FORGOT PASSWORD OTP ERROR:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message: "Server Error",
+    });
+  }
+};
+
+const resetAdminPassword = async (req, res) => {
+  try {
+
+    const {
+      email,
+      newPassword,
+      confirmPassword,
+    } = req.body;
+
+    // --------------------------------
+    // Required Fields
+    // --------------------------------
+
+    if (!email || !newPassword || !confirmPassword) {
+      return res.status(400).json({
+        success: false,
+        message: "Email, new password and confirm password are required.",
+      });
+    }
+
+    // --------------------------------
+    // Password Match
+    // --------------------------------
+
+    if (newPassword !== confirmPassword) {
+      return res.status(400).json({
+        success: false,
+        message: "Passwords do not match.",
+      });
+    }
+
+    // --------------------------------
+    // Validate Password
+    // --------------------------------
+
+    const passwordError = validatePassword(newPassword);
+
+    if (passwordError) {
+      return res.status(400).json({
+        success: false,
+        message: passwordError,
+      });
+    }
+
+    // --------------------------------
+    // Normalize Email
+    // --------------------------------
+
+    const normalizedEmail = email.trim().toLowerCase();
+
+    // --------------------------------
+    // Find Admin
+    // --------------------------------
+
+    const admin = await Admin.findOne({
+      email: normalizedEmail,
+    });
+
+    if (!admin) {
+      return res.status(404).json({
+        success: false,
+        message: "Admin not found.",
+      });
+    }
+
+    // --------------------------------
+    // Block Check
+    // --------------------------------
+
+    if (admin.isBlocked) {
+      return res.status(403).json({
+        success: false,
+        message: "Your admin account has been blocked.",
+      });
+    }
+
+    // --------------------------------
+    // OTP Verification Check
+    // --------------------------------
+
+    if (admin.otpPurpose !== "forgotPasswordVerified") {
+      return res.status(400).json({
+        success: false,
+        message: "Please verify the OTP before resetting your password.",
+      });
+    }
+
+    // --------------------------------
+    // Hash New Password
+    // --------------------------------
+
+    const hashedPassword = await bcrypt.hash(
+      newPassword,
+      10
+    );
+
+    // --------------------------------
+    // Update Password
+    // --------------------------------
+
+    admin.password = hashedPassword;
+
+    // --------------------------------
+    // Invalidate Existing Sessions
+    // --------------------------------
+
+    admin.refreshToken = "";
+
+    // --------------------------------
+    // Clear OTP State
+    // --------------------------------
+
+    admin.otp = null;
+    admin.otpExpiresAt = null;
+    admin.otpPurpose = null;
+    admin.otpResendAvailableAt = null;
+
+    await admin.save();
+
+    // --------------------------------
+    // Response
+    // --------------------------------
+
+    return res.status(200).json({
+      success: true,
+      message: "Password reset successfully. Please login again.",
+    });
+
+  } catch (error) {
+
+    console.log(
+      "RESET ADMIN PASSWORD ERROR:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message: "Server Error",
+    });
+  }
+};
+
+
+const resendForgotPasswordOTP = async (req, res) => {
+  try {
+
+    const { email } = req.body;
+
+    // --------------------------------
+    // Email Required
+    // --------------------------------
+
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: "Email is required.",
+      });
+    }
+
+    // --------------------------------
+    // Normalize Email
+    // --------------------------------
+
+    const normalizedEmail = email.trim().toLowerCase();
+
+    // --------------------------------
+    // Find Admin
+    // --------------------------------
+
+    const admin = await Admin.findOne({
+      email: normalizedEmail,
+    });
+
+    if (!admin) {
+      return res.status(404).json({
+        success: false,
+        message: "Admin not found.",
+      });
+    }
+
+    // --------------------------------
+    // Block Check
+    // --------------------------------
+
+    if (admin.isBlocked) {
+      return res.status(403).json({
+        success: false,
+        message: "Your admin account has been blocked.",
+      });
+    }
+
+    // --------------------------------
+    // Already Verified Reset Check
+    // --------------------------------
+
+    if (admin.otpPurpose === "forgotPasswordVerified") {
+      return res.status(400).json({
+        success: false,
+        message: "OTP has already been verified. You can reset your password.",
+      });
+    }
+
+    // --------------------------------
+    // Resend Cooldown
+    // --------------------------------
+
+    if (
+      admin.otpResendAvailableAt &&
+      new Date() < admin.otpResendAvailableAt
+    ) {
+
+      const remainingSeconds = Math.ceil(
+        (admin.otpResendAvailableAt.getTime() - Date.now()) / 1000
+      );
+
+      return res.status(429).json({
+        success: false,
+        message: `Please wait ${remainingSeconds} seconds before requesting another OTP.`,
+      });
+    }
+
+    // --------------------------------
+    // Generate New OTP
+    // --------------------------------
+
+    const otp = generateOTP();
+
+    const otpExpiresAt = getOTPExpiry();
+
+  
+
+    // --------------------------------
+    // Save New OTP
+    // --------------------------------
+
+    admin.otp = otp;
+    admin.otpExpiresAt = otpExpiresAt;
+    admin.otpPurpose = "forgotPassword";
+    admin.otpResendAvailableAt = new Date(
+  Date.now() + 60 * 1000
+);
+
+    await admin.save();
+
+    // --------------------------------
+    // Send Email
+    // --------------------------------
+
+    try {
+
+      await sendOTPEmail(
+        normalizedEmail,
+        otp
+      );
+
+    } catch (emailError) {
+
+      console.log(
+        "RESEND FORGOT PASSWORD OTP EMAIL ERROR:",
+        emailError
+      );
+
+      // Invalidate OTP if email failed
+
+      admin.otp = null;
+      admin.otpExpiresAt = null;
+      admin.otpPurpose = null;
+      admin.otpResendAvailableAt = null;
+
+      await admin.save();
+
+      return res.status(500).json({
+        success: false,
+        message: "OTP email could not be sent.",
+      });
+    }
+
+    // --------------------------------
+    // Response
+    // --------------------------------
+
+    return res.status(200).json({
+      success: true,
+      message: "A new OTP has been sent to your email.",
+    });
+
+  } catch (error) {
+
+    console.log(
+      "RESEND FORGOT PASSWORD OTP ERROR:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message: "Server Error.",
+    });
+  }
+};
+    
+
+const getCurrentAdmin = async (req, res) => {
+  try {
+
+    // --------------------------------
+    // Admin from adminProtect middleware
+    // --------------------------------
+
+    const adminId = req.user._id;
+
+    // --------------------------------
+    // Find Admin
+    // --------------------------------
+
+    const admin = await Admin.findById(adminId)
+      .select("-password -refreshToken -otp -otpExpiresAt");
+
+    if (!admin) {
+      return res.status(404).json({
+        success: false,
+        message: "Admin not found.",
+      });
+    }
+
+    // --------------------------------
+    // Response
+    // --------------------------------
+
+    return res.status(200).json({
+      success: true,
+      message: "Admin profile fetched successfully.",
+      admin,
+    });
+
+  } catch (error) {
+
+    console.log("GET CURRENT ADMIN ERROR:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Server Error.",
+    });
+  }
+};
+
+const changeAdminPassword = async (req, res) => {
+  try {
+
+    const adminId = req.user._id;
+
+    const {
+      currentPassword,
+      newPassword,
+      confirmPassword,
+    } = req.body;
+
+    // --------------------------------
+    // Required Fields
+    // --------------------------------
+
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      return res.status(400).json({
+        success: false,
+        message: "Current password, new password and confirm password are required.",
+      });
+    }
+
+    // --------------------------------
+    // New Password Confirmation
+    // --------------------------------
+
+    if (newPassword !== confirmPassword) {
+      return res.status(400).json({
+        success: false,
+        message: "New password and confirm password do not match.",
+      });
+    }
+
+    // --------------------------------
+    // Validate New Password
+    // --------------------------------
+
+    const passwordError = validatePassword(newPassword);
+
+    if (passwordError) {
+      return res.status(400).json({
+        success: false,
+        message: passwordError,
+      });
+    }
+
+    // --------------------------------
+    // Find Admin
+    // --------------------------------
+
+    const admin = await Admin.findById(adminId);
+
+    if (!admin) {
+      return res.status(404).json({
+        success: false,
+        message: "Admin not found.",
+      });
+    }
+
+    // --------------------------------
+    // Check Blocked
+    // --------------------------------
+
+    if (admin.isBlocked) {
+      return res.status(403).json({
+        success: false,
+        message: "Admin account has been blocked.",
+      });
+    }
+
+    // --------------------------------
+    // Check Current Password
+    // --------------------------------
+
+    const passwordMatch = await bcrypt.compare(
+      currentPassword,
+      admin.password
+    );
+
+    if (!passwordMatch) {
+      return res.status(401).json({
+        success: false,
+        message: "Current password is incorrect.",
+      });
+    }
+
+    // --------------------------------
+    // Prevent Same Password
+    // --------------------------------
+
+    const samePassword = await bcrypt.compare(
+      newPassword,
+      admin.password
+    );
+
+    if (samePassword) {
+      return res.status(400).json({
+        success: false,
+        message: "New password must be different from current password.",
+      });
+    }
+
+    // --------------------------------
+    // Hash New Password
+    // --------------------------------
+
+    const hashedPassword = await bcrypt.hash(
+      newPassword,
+      10
+    );
+
+    admin.password = hashedPassword;
+
+    // --------------------------------
+    // Invalidate Refresh Token
+    // --------------------------------
+
+    admin.refreshToken = "";
+
+    await admin.save();
+
+    // --------------------------------
+    // Response
+    // --------------------------------
+
+    return res.status(200).json({
+      success: true,
+      message: "Password changed successfully. Please login again.",
+    });
+
+  } catch (error) {
+
+    console.log(
+      "CHANGE ADMIN PASSWORD ERROR:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message: "Server Error.",
+    });
+  }
+};
+
+module.exports = { createAdmin,verifyAdminOTP,resendAdminOTP,loginAdmin,getAdminProfile,logoutAdmin, refreshAdminToken,forgotAdminPassword,verifyForgotPasswordOTP,resetAdminPassword,resendForgotPasswordOTP,getCurrentAdmin,changeAdminPassword};

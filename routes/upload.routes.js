@@ -8,7 +8,7 @@ router.post("/products", (req, res) => {
 
   upload.array("images", MAX_PRODUCT_IMAGES)(req, res, (err) => {
 
-    // Multer Errors
+  
     if (err instanceof multer.MulterError) {
 
       switch (err.code) {
@@ -33,7 +33,7 @@ router.post("/products", (req, res) => {
       }
     }
 
-    // Custom Errors
+   
     if (err) {
       return res.status(400).json({
         success: false,
@@ -41,7 +41,7 @@ router.post("/products", (req, res) => {
       });
     }
 
-    // No Image
+   
     if (!req.files || req.files.length === 0) {
       return res.status(400).json({
         success: false,

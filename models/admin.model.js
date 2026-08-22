@@ -12,7 +12,6 @@ const adminSchema = new mongoose.Schema(
     lastName: {
       type: String,
       required: true,
-      unique: true,
       trim: true,
     },
 
@@ -34,7 +33,6 @@ const adminSchema = new mongoose.Schema(
     password: {
       type: String,
       required: true,
-      unique: true,
     },
 
     avatar: {
@@ -63,6 +61,17 @@ otpExpiresAt: {
   default: null,
 },
 
+otpPurpose: {
+  type: String,
+  enum: ["verification", "forgotPassword","forgotPasswordVerified"],
+  default: null,
+},
+
+otpResendAvailableAt: {
+  type: Date,
+  default: null,
+},
+
     isBlocked: {
       type: Boolean,
       default: false,
@@ -72,6 +81,11 @@ otpExpiresAt: {
       type: String,
       default: "",
     },
+
+    tokenVersion: {
+  type: Number,
+  default: 0,
+},
 
     lastLogin: {
       type: Date,
