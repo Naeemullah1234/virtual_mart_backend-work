@@ -33,6 +33,9 @@ const adminProtect = async (req, res, next) => {
 
     const admin = await Admin.findById(decoded.id) .select("-password -refreshToken -otp -otpExpiresAt");
 
+
+    
+
     if (!admin) {
       return res.status(401).json({ success: false, message: "Admin not found.",});}
 
@@ -43,6 +46,19 @@ const adminProtect = async (req, res, next) => {
 
     if (admin.isBlocked) {
       return res.status(403).json({ success: false, message: "Admin account is blocked.", });}
+
+
+      // --------------------------------
+// Token Version Check
+// --------------------------------
+
+if (decoded.tokenVersion !== admin.tokenVersion) {
+  return res.status(401).json({
+    success: false,
+    message: "Session expired. Please login again.",
+    code: "SESSION_EXPIRED",
+  });
+}
 
 
     req.user = admin;
