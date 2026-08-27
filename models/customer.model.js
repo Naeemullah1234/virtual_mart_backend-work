@@ -15,15 +15,13 @@ const customerSchema = new mongoose.Schema(
   
     avatar: { type: String, default: "", },
 
-     role: { type: String, enum: ["customer", "admin"],default: "customer"},
+     role: { type: String, enum: ["customer", "customer"],default: "customer"},
 
     isEmailVerified: { type: Boolean, default: false,},
 
     isPhoneVerified: { type: Boolean, default: false,},
 
     googleId: { type: String, default: null,},
-
-    isBlocked: { type: Boolean,default: false,},
 
       isVerified: { type: Boolean,default: false,},
 
@@ -35,7 +33,11 @@ const customerSchema = new mongoose.Schema(
 
     otpPurpose: {  type: String, enum: ["verification","forgotPassword","forgotPasswordVerified",null,], default: null,},
 
+      otpAttempts: {type: Number,default: 0,},
+    
     otpResendAvailableAt: { type: Date,default: null,},
+
+  
 
     refreshToken: { type: String, default: "",},
 

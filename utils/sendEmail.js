@@ -8,12 +8,12 @@ const sendOTPEmail = async (email, otp) => {
 
   const mailOptions = { from: `"Virtual Mart" <${process.env.EMAIL_USER}>`, to: email,
 
-    subject: "Admin Email Verification OTP",
+    subject: "CHECK MART Email Verification OTP",
 
     html: `
       <div style="font-family: Arial, sans-serif;">
 
-        <h2>Admin Email Verification</h2>
+        <h2>Check Mart Email Verification</h2>
 
         <p>Your verification OTP is:</p>
 

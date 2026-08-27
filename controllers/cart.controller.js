@@ -83,23 +83,37 @@ const existingItem = cart.items.find(
 );
 
 
+
 if (existingItem) {
 
-  existingItem.quantity += quantity;
+  const newQuantity = existingItem.quantity + quantity;
 
-}
+  if (newQuantity > product.stock) {
+    return res.status(400).json({
+      success: false,
+      message: `Only ${product.stock} item(s) available in stock.`,
+    });
+  }
 
+  existingItem.quantity = newQuantity;
 
-else {
+} else {
+
+  if (quantity > product.stock) {
+    return res.status(400).json({
+      success: false,
+      message: `Only ${product.stock} item(s) available in stock.`,
+    });
+  }
 
   cart.items.push({
-
     product: productId,
-
+    variant: {
+    size: " ",
+    color: " "
+  },
     quantity,
-
   });
-
 }
 
 await cart.save();

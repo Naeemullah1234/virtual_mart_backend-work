@@ -1,17 +1,25 @@
-const User = require("../models/user.model");
 const Customer = require("../models/customer.model");
 const jwt = require("jsonwebtoken");
 
-const protect = async (req, res, next) => {
+const customerProtect = async (req, res, next) => {
   try {
+
     let token;
+
+    // --------------------------------
+    // Get Token
+    // --------------------------------
 
     if (
       req.headers.authorization &&
-      req.headers.authorization.startsWith("Bearer")
+      req.headers.authorization.startsWith("Bearer ")
     ) {
       token = req.headers.authorization.split(" ")[1];
     }
+
+    // --------------------------------
+    // Token Required
+    // --------------------------------
 
     if (!token) {
       return res.status(401).json({
@@ -20,42 +28,55 @@ const protect = async (req, res, next) => {
       });
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    // --------------------------------
+    // Verify Token
+    // --------------------------------
+
+    const decoded = jwt.verify(
+      token,
+      process.env.JWT_SECRET
+    );
+
+    // --------------------------------
+    // Check ID
+    // --------------------------------
 
     if (!decoded.id) {
       return res.status(401).json({
         success: false,
-        message: "Invalid Token.",
+        message: "Invalid Customer Token.",
       });
     }
 
-    // const user = await User.findById(decoded.id).select("-password");
+    // --------------------------------
+    // Check Role
+    // --------------------------------
 
-    // console.log("USER FOUND:", user);
+    if (decoded.role !== "customer") {
+      return res.status(403).json({
+        success: false,
+        message: "Access Denied. Customer access required.",
+      });
+    }
 
-    // if (!user) {
-    //   return res.status(401).json({
-    //     success: false,
-    //     message: "User not found.",
-    //   });
-    // }
+    // --------------------------------
+    // Find Customer
+    // --------------------------------
 
-    // req.user = user;
+    const customer = await Customer.findById(
+      decoded.id
+    ).select(
+      "-password -refreshToken -otp -otpExpiresAt"
+    );
 
+    if (!customer) {
+      return res.status(401).json({
+        success: false,
+        message: "Customer not found.",
+      });
+    }
 
-    const customer = await Customer.findById(decoded.id)
-  .select("-password -refreshToken -otp -otpExpiresAt");
-
-console.log("CUSTOMER FOUND:", customer);
-
-if (!customer) {
-  return res.status(401).json({
-    success: false,
-    message: "Customer not found.",
-  });
-}
-
- // --------------------------------
+    // --------------------------------
     // Email Verification
     // --------------------------------
 
@@ -95,7 +116,7 @@ if (!customer) {
     if (customer.isDeleted) {
       return res.status(403).json({
         success: false,
-        message: "Customer account has been deleted.",
+        message: "Customer account no longer exists.",
       });
     }
 
@@ -115,14 +136,15 @@ if (!customer) {
       });
     }
 
+    // --------------------------------
+    // Attach User
+    // --------------------------------
 
-
-req.user = customer;
-
+    req.user = customer;
 
     next();
 
-} catch (error) {
+  } catch (error) {
 
     console.log(
       "CUSTOMER AUTH ERROR:",
@@ -154,6 +176,10 @@ req.user = customer;
       });
     }
 
+    // --------------------------------
+    // Other Errors
+    // --------------------------------
+
     return res.status(401).json({
       success: false,
       message: "Authentication failed.",
@@ -161,34 +187,6 @@ req.user = customer;
   }
 };
 
-
-const authorize = (...roles) => {
-  return (req, res, next) => {
-
-    if (process.env.ENABLE_ADMIN_AUTH === "false") {
-      return next();
-    }
-
-    if (!req.user) {
-      return res.status(401).json({
-        success: false,
-        message: "User not authenticated.",
-      });
-    }
-
-    if (!roles.includes(req.user.role)) {
-      return res.status(403).json({
-        success: false,
-        message: "Access Denied. You are not authorized to perform this action.",
-      });
-    }
-
-    next();
-  };
-};
-
-
 module.exports = {
-  protect,
-  authorize,
+  customerProtect,
 };

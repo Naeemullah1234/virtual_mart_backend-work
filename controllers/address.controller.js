@@ -2,13 +2,13 @@ const mongoose = require("mongoose");
 const Address = require("../models/address.model");
 
 
-const { validateFullName,validatePhone,validateOptionalEmail,validateRequiredText,validatePostalCode,} = require("../validators/address.validator");
+const { validateFullName,validatePhone,validateOptionalEmail,validateRequiredText,validatePostalCode, validateLabel,} = require("../validators/address.validator");
 
 
 const addAddress = async (req, res) => {
   try {
 
-    const {fullName,phone,email,country,state,city,postalCode,addressLine1,addressLine2,landmark,addressType,} = req.body;
+    const {fullName,phone,email,country,state,city,postalCode,addressLine1,addressLine2,landmark,label,} = req.body;
 
   const fullNameError = validateFullName(fullName);
 
@@ -52,7 +52,7 @@ if (addressError) {
   return res.status(400).json({ success: false, message: addressError,});}
 
 
-const addressCount = await Address.countDocuments({ customer: req.user._id,});
+const addressCount = await Address.countDocuments({ customer: req.user._id, isActive: true,});
 
 const isDefault = addressCount === 0;
 
@@ -90,7 +90,7 @@ const getSingleAddress = async (req, res) => {
 
     const { id } = req.params;
 
-    const address = await Address.findOne({ _id: id,customer: req.user._id,});
+    const address = await Address.findOne({ _id: id,customer: req.user._id, isActive: true,});
 
     if (!address) { return res.status(404).json({ success: false, message: "Address not found.",});}
 
@@ -112,7 +112,7 @@ const updateAddress = async (req, res) => {
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({ success: false,message: "Invalid address ID.",});}
 
-    const address = await Address.findOne({ _id: id,customer: req.user._id,});
+    const address = await Address.findOne({ _id: id,customer: req.user._id, isActive: true,});
 
     if (!address) {
       return res.status(404).json({ success: false, message: "Address not found.",});}
@@ -246,15 +246,21 @@ const deleteAddress = async (req, res) => {
 
     await address.save();
 
-if (address.isDefault) {
-
-  const nextDefaultAddress = await Address.findOne({ customer: req.user._id,isActive: true, _id: { $ne: address._id },}).sort({ createdAt: 1,});
+    if (wasDefault) {
+  const nextDefaultAddress = await Address.findOne({
+    customer: req.user._id,
+    isActive: true,
+    _id: { $ne: address._id },
+  }).sort({
+    createdAt: 1,
+  });
 
   if (nextDefaultAddress) {
- nextDefaultAddress.isDefault = true;
-
+    nextDefaultAddress.isDefault = true;
     await nextDefaultAddress.save();
-  }}
+  }
+}
+
 
 return res.status(200).json({success: true, message: "Address deleted successfully.",});
 
@@ -264,7 +270,62 @@ return res.status(200).json({success: true, message: "Address deleted successful
     res.status(500).json({success: false,message: "Server Error",});}};
 
 
+   const setDefaultAddress = async (req, res) => {
+  try {
+    const { id } = req.params;
 
-module.exports = { addAddress, getAddresses,getSingleAddress,updateAddress,deleteAddress
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid address ID.",
+      });
+    }
+
+    const address = await Address.findOne({
+      _id: id,
+      customer: req.user._id,
+      isActive: true,
+    });
+
+    if (!address) {
+      return res.status(404).json({
+        success: false,
+        message: "Address not found.",
+      });
+    }
+
+    await Address.updateMany(
+      {
+        customer: req.user._id,
+        isActive: true,
+      },
+      {
+        $set: { isDefault: false },
+      }
+    );
+
+    address.isDefault = true;
+
+    await address.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Default address updated successfully.",
+      address,
+    });
+
+  } catch (error) {
+    console.log(error);
+
+    res.status(500).json({
+      success: false,
+      message: "Server Error",
+    });
+  }
+}; 
+
+
+
+module.exports = { addAddress, getAddresses,getSingleAddress,updateAddress,deleteAddress,setDefaultAddress
 
 };
