@@ -6,21 +6,28 @@ const createSubCategory = async (req, res) => {
   try {
     const { name, category, image, displayOrder } = req.body;
 
-   
-    const categoryExists = await Category.findById(category);
+const normalizedName = name?.trim().toLowerCase();
 
-    if (!categoryExists) {
+if (!normalizedName) {
+  return res.status(400).json({
+    success: false,
+    message: "Sub Category name is required.",
+  });
+}
 
-      return res.status(404).json({ success: false,message: "Category not found.",});}
+const categoryExists = await Category.findOne({_id: category,isDeleted: false,isActive: true,});
+
+if (!categoryExists) {
+  return res.status(404).json({ success: false,message: "Category not found or inactive.",});}
 
   
-    const alreadyExists = await SubCategory.findOne({ name,category,isDeleted: false,});
+    const alreadyExists = await SubCategory.findOne({ name: normalizedName,category,isDeleted: false,});
 
     if (alreadyExists) {
 
       return res.status(400).json({ success: false,message: "Sub Category already exists in this category.",});}
 
-    const subCategory = await SubCategory.create({ name,category,image,displayOrder,});
+    const subCategory = await SubCategory.create({  name: normalizedName,category,image,displayOrder,});
 
     res.status(201).json({ success: true, message: "Sub Category created successfully.",subCategory,});
 
@@ -77,15 +84,23 @@ const getSubCategoryById = async (req, res) => {
 
       return res.status(404).json({success: false,message: "Sub Category not found.",});}
 
+
     if (category) {
-      const categoryExists = await Category.findById(category);
+  const categoryExists = await Category.findOne({
+    _id: category,
+    isDeleted: false,
+    isActive: true,
+  });
 
-      if (!categoryExists) {
+  if (!categoryExists) {
+    return res.status(404).json({
+      success: false,
+      message: "Category not found or inactive.",
+    });
+  }
 
-        return res.status(404).json({ success: false,message: "Category not found.",});}
-
-      subCategory.category = category;
-    }
+  subCategory.category = category;
+}
 
     subCategory.name = name || subCategory.name;
     subCategory.image = image ?? subCategory.image;

@@ -1,5 +1,4 @@
 const mongoose = require("mongoose");
-const slugify = require("slugify");
 
 const productSchema = new mongoose.Schema(
   {
@@ -8,10 +7,11 @@ const productSchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
-    slug: {
+
+slug: {
   type: String,
-  required: true,
   unique: true,
+  lowercase: true,
   trim: true,
 },
 
@@ -24,7 +24,6 @@ const productSchema = new mongoose.Schema(
     productType: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "ProductType",
-      default: null,
        required: true,
     },
 
@@ -45,6 +44,7 @@ const productSchema = new mongoose.Schema(
       ref: "Brand",
       required: true,
     },
+    
 
     season: {
       type: mongoose.Schema.Types.ObjectId,
@@ -52,31 +52,6 @@ const productSchema = new mongoose.Schema(
       default: null,
     },
 
-    sku: {
-      type: String,
-      unique: true,
-      required: true,
-      trim: true,
-      uppercase: true,
-    },
-
-    originalPrice: {
-      type: Number,
-      required: true,
-      min: 0,
-    },
-
-    salePrice: {
-      type: Number,
-      required: true,
-      min: 0,
-    },
-
-    stock: {
-  type: Number,
-  default: 0,
-  min: 0,
-},
 
 averageRating: {
   type: Number,
@@ -120,6 +95,15 @@ totalReviews: {
   },
 ],
 
+
+    variants: [
+  {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "ProductVariant",
+  },
+],
+
+
     description: {
       type: String,
       trim: true,
@@ -151,9 +135,12 @@ totalReviews: {
       default: false,
     },
   },
+
   {
     timestamps: true,
   }
 );
+
+
 
 module.exports = mongoose.model("Product", productSchema);

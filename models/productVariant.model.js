@@ -9,8 +9,6 @@ const productVariantSchema = new mongoose.Schema(
     product: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Product",
-      required: true,
-      index: true,
     },
 
     // --------------------------------
@@ -49,6 +47,11 @@ attributes: [
   },
 ],
 
+  attributeSignature: {
+  type: String,
+  trim: true,
+  index: true,
+},
 
 
     // --------------------------------
@@ -56,16 +59,22 @@ attributes: [
     // --------------------------------
 
     price: {
-      type: Number,
-      required: true,
-      min: 0,
-    },
+  type: Number,
+  required: true,
+  min: 0,
+},
 
     salePrice: {
-      type: Number,
-      default: 0,
-      min: 0,
+  type: Number,
+  default: null,
+  min: 0,
+  validate: {
+    validator: function (value) {
+      return value === null || value <= this.price;
     },
+    message: "Sale price cannot be greater than price.",
+  },
+},
 
     // --------------------------------
     // Stock
@@ -82,26 +91,33 @@ attributes: [
     // Variant Images
     // --------------------------------
 
-    images: [
-      {
-        type: String,
-        trim: true,
-      },
-    ],
-
-    // --------------------------------
-    // Status
-    // --------------------------------
-
-    isActive: {
-      type: Boolean,
-      default: true,
+   images: [
+  {
+    filename: {
+      type: String,
+      trim: true,
+      required: true,
     },
 
-    isDeleted: {
+    url: {
+      type: String,
+      trim: true,
+      required: true,
+    },
+
+    alt: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+
+    isPrimary: {
       type: Boolean,
       default: false,
     },
+  },
+],
+
   },
   {
     timestamps: true,
@@ -109,19 +125,38 @@ attributes: [
 );
 
 // --------------------------------
-// Prevent Duplicate Variants
+// Generate Attribute Signature
 // --------------------------------
+
+productVariantSchema.pre("validate", function () {
+  if (!Array.isArray(this.attributes) || this.attributes.length === 0) {
+    this.attributeSignature = "";
+    return;
+  }
+
+  const normalizedAttributes = this.attributes
+    .map((attribute) => ({
+      key: attribute.key.trim().toLowerCase(),
+      value: attribute.value.trim().toLowerCase(),
+    }))
+    .sort((a, b) => a.key.localeCompare(b.key));
+
+  this.attributeSignature = normalizedAttributes
+    .map((attribute) => `${attribute.key}:${attribute.value}`)
+    .join("|");
+});
 
 productVariantSchema.index(
   {
     product: 1,
-    color: 1,
-    size: 1,
+    attributeSignature: 1,
   },
   {
     unique: true,
   }
 );
+
+
 
 module.exports = mongoose.model(
   "ProductVariant",

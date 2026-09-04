@@ -23,6 +23,24 @@ app.use( "/uploads",express.static(path.join(__dirname, "uploads")));
 app.use("/api/admins", adminRoutes);
 app.use("/api", routes);
 
+app.use((err, req, res, next) => {
+  if (err.name === "MulterError") {
+    return res.status(400).json({
+      success: false,
+      message: err.message,
+    });
+  }
+
+  if (err.message === "Only JPG, JPEG, PNG and WEBP images are allowed.") {
+    return res.status(400).json({
+      success: false,
+      message: err.message,
+    });
+  }
+
+  next(err);
+});
+
 
 app.use((req, res) => {
   res.status(404).json({success: false,message: "API Not Found",});});

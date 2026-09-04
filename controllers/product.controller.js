@@ -1,5 +1,6 @@
 const mongoose = require("mongoose");
 const Product = require("../models/product.model");
+const ProductVariant = require("../models/productVariant.model");
 const Category = require("../models/category.model");
 const ProductType = require("../models/productType.model");
 const SubCategory = require("../models/subCategory.model");
@@ -8,45 +9,169 @@ const Brand = require("../models/brand.model");
 const Season = require("../models/season.model");
 const slugify = require("slugify");
 
-// Generate SKU
-const generateSKU = async () => {
-  const lastProduct = await Product.findOne()
-    .sort({ createdAt: -1 })
-    .select("sku");
+// Generate Unique Slug
+const generateUniqueSlug = async (name, productId = null) => {
+  const baseSlug = slugify(name, {
+    lower: true,
+    strict: true,
+  });
 
-  if (!lastProduct) {
-    return "VM-000001";
+  let slug = baseSlug;
+  let counter = 1;
+
+  while (true) {
+    const existingProduct = await Product.findOne({
+      slug,
+      ...(productId && { _id: { $ne: productId } }),
+    });
+
+    if (!existingProduct) {
+      break;
+    }
+
+    counter++;
+
+    slug = `${baseSlug}-${counter}`;
   }
 
-  const lastNumber = parseInt(lastProduct.sku.replace("VM-", ""), 10);
-
-  const nextNumber = lastNumber + 1;
-
-  return `VM-${String(nextNumber).padStart(6, "0")}`;
+  return slug;
 };
 
 
 // Create Product
 const createProduct = async (req, res) => {
-  try {
-    const {
-      name,
-      category,
-      productType,
-      subCategory,
-      fabricType,
-      brand,
-      season,
-      description,
-      originalPrice,
-      salePrice,
-      stock,
-      images,
-      featured,
-      bestSeller,
-      newArrival,
-    } = req.body;
 
+  let session;
+
+  try {
+    
+    const {name,category,productType,subCategory,fabricType, brand,season, description,
+      featured,bestSeller,newArrival,variants,} = req.body;
+
+      if (!Array.isArray(variants) || variants.length === 0) {
+  return res.status(400).json({
+    success: false,
+    message: "At least one product variant is required.",
+  });
+}
+
+    const invalidVariantId = variants.find(
+  (variantId) => !mongoose.Types.ObjectId.isValid(variantId)
+);
+
+if (invalidVariantId) {
+  return res.status(400).json({
+    success: false,
+    message: `Invalid Product Variant ID: ${invalidVariantId}`,
+  });
+}  
+   const uniqueVariantIds = [...new Set(variants.map((id) => id.toString()))];
+
+if (uniqueVariantIds.length !== variants.length) {
+  return res.status(400).json({
+    success: false,
+    message: "Duplicate product variant IDs are not allowed.",
+  });
+} 
+    
+   const existingVariants = await ProductVariant.find({
+  _id: { $in: uniqueVariantIds },
+}).select("_id");
+
+if (existingVariants.length !== uniqueVariantIds.length) {
+  return res.status(404).json({
+    success: false,
+    message: "One or more product variants were not found.",
+  });
+}
+
+
+    const alreadyLinkedVariant = await ProductVariant.findOne({
+  _id: { $in: uniqueVariantIds },
+  product: { $ne: null },
+}).select("_id product");
+
+if (alreadyLinkedVariant) {
+  return res.status(400).json({
+    success: false,
+    message: "One or more product variants are already linked to another product.",
+  });
+}
+
+
+
+      const images = (req.files || []).map((file, index) => ({
+  filename: file.filename,
+  url: `/uploads/products/${file.filename}`,
+  alt: name?.trim() || "",
+  isPrimary: index === 0,
+}));
+
+    // --------------------------------
+// Boolean Validation
+// --------------------------------
+
+const normalizeBoolean = (value) => {
+  if (value === undefined || value === "") return undefined;
+  if (value === true || value === "true") return true;
+  if (value === false || value === "false") return false;
+
+  return null;
+};
+
+const normalizedFeatured = normalizeBoolean(featured);
+const normalizedBestSeller = normalizeBoolean(bestSeller);
+const normalizedNewArrival = normalizeBoolean(newArrival);
+
+const booleanFields = {
+  featured: normalizedFeatured,
+  bestSeller: normalizedBestSeller,
+  newArrival: normalizedNewArrival,
+};
+
+for (const [field, value] of Object.entries(booleanFields)) {
+  if (value === null) {
+    return res.status(400).json({
+      success: false,
+      message: `${field} must be true or false.`,
+    });
+  }
+}
+
+   if (!name?.trim()) {
+  return res.status(400).json({
+    success: false,
+    message: "Product name is required.",
+  });
+}
+
+if (!category || !productType || !subCategory || !fabricType || !brand) {
+  return res.status(400).json({
+    success: false,
+    message:
+      "Category, Product Type, Sub Category, Fabric Type and Brand are required.",
+  });
+}
+
+if (
+  !mongoose.Types.ObjectId.isValid(category) ||
+  !mongoose.Types.ObjectId.isValid(productType) ||
+  !mongoose.Types.ObjectId.isValid(subCategory) ||
+  !mongoose.Types.ObjectId.isValid(fabricType) ||
+  !mongoose.Types.ObjectId.isValid(brand)
+) {
+  return res.status(400).json({
+    success: false,
+    message: "Invalid Category, Product Type, Sub Category, Fabric Type or Brand ID.",
+  });
+}
+
+if (season && !mongoose.Types.ObjectId.isValid(season)) {
+  return res.status(400).json({
+    success: false,
+    message: "Invalid Season ID.",
+  });
+}
 
     // --------------------------------
 // Images Validation
@@ -111,59 +236,7 @@ if (imageUrls.length !== uniqueUrls.length) {
   });
 }
 
-
-    // -----------------------------
-    // Required Fields
-    // -----------------------------
-
-    if (
-      !name ||
-      !category ||
-      !productType ||
-      !subCategory ||
-      !fabricType ||
-      !brand ||
-      originalPrice === undefined ||
-      salePrice === undefined
-    ) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "Name, category, product type, sub category, fabric type, brand, original price and sale price are required.",
-      });
-    }
-
-
-    // -----------------------------
-    // Price Validation
-    // -----------------------------
-
-    if (originalPrice < 0 || salePrice < 0) {
-      return res.status(400).json({
-        success: false,
-        message: "Price cannot be negative.",
-      });
-    }
-
-    if (salePrice > originalPrice) {
-      return res.status(400).json({
-        success: false,
-        message: "Sale price cannot be greater than original price.",
-      });
-    }
-
-
-    // -----------------------------
-    // Stock Validation
-    // -----------------------------
-
-    if (stock !== undefined && stock < 0) {
-      return res.status(400).json({
-        success: false,
-        message: "Stock cannot be negative.",
-      });
-    }
-
+   
 
     // -----------------------------
     // Check Category
@@ -181,7 +254,7 @@ if (imageUrls.length !== uniqueUrls.length) {
         message: "Category not found or inactive.",
       });
     }
-
+  
 
     // -----------------------------
     // Check Product Type
@@ -205,18 +278,19 @@ if (imageUrls.length !== uniqueUrls.length) {
     // Check Sub Category
     // -----------------------------
 
-    const subCategoryExists = await SubCategory.findOne({
-      _id: subCategory,
-      isDeleted: false,
-      isActive: true,
-    });
+     const subCategoryExists = await SubCategory.findOne({
+  _id: subCategory,
+  category: category,
+  isDeleted: false,
+  isActive: true,
+});
 
-    if (!subCategoryExists) {
-      return res.status(404).json({
-        success: false,
-        message: "Sub Category not found or inactive.",
-      });
-    }
+if (!subCategoryExists) {
+  return res.status(404).json({
+    success: false,
+    message: "Sub Category not found, inactive, or does not belong to the selected category.",
+  });
+}
 
 
     // -----------------------------
@@ -279,45 +353,19 @@ if (imageUrls.length !== uniqueUrls.length) {
     // Generate SKU
     // -----------------------------
 
-    const sku = await generateSKU();
+    // const sku = await generateSKU();
 
-    // Generate Unique Slug
-const generateUniqueSlug = async (name, productId = null) => {
-
-  const baseSlug = slugify(name, {
-    lower: true,
-    strict: true,
-  });
-
-  let slug = baseSlug;
-
-  let counter = 1;
-
-  while (true) {
-
-    const existingProduct = await Product.findOne({
-      slug,
-      ...(productId && { _id: { $ne: productId } }),
-    });
-
-    if (!existingProduct) {
-      break;
-    }
-
-    counter++;
-
-    slug = `${baseSlug}-${counter}`;
-  }
-
-  return slug;
-};
+     const session = await mongoose.startSession();
+    session.startTransaction();
 
 
     // -----------------------------
     // Create Product
     // -----------------------------
 
-    const product = await Product.create({
+     const [product] = await Product.create(
+  [
+    {
       name,
       category,
       productType,
@@ -325,17 +373,35 @@ const generateUniqueSlug = async (name, productId = null) => {
       fabricType,
       brand,
       season: season || null,
-      sku,
       slug,
       description: description || "",
-      originalPrice,
-      salePrice,
-      stock: stock ?? 0,
       images: images || [],
-      featured: featured ?? false,
-      bestSeller: bestSeller ?? false,
-      newArrival: newArrival ?? false,
-    });
+      variants: uniqueVariantIds,
+      featured: normalizedFeatured ?? false,
+      bestSeller: normalizedBestSeller ?? false,
+      newArrival: normalizedNewArrival ?? false,
+    },
+  ],
+
+
+  { session }
+);
+
+await ProductVariant.updateMany(
+  {
+    _id: { $in: uniqueVariantIds },
+  },
+  {
+    $set: {
+      product: product._id,
+    },
+  },
+  { session }
+);
+
+ 
+   await session.commitTransaction();
+     session.endSession();
 
 
     // -----------------------------
@@ -348,16 +414,20 @@ const generateUniqueSlug = async (name, productId = null) => {
       product,
     });
 
-  } catch (error) {
-    console.log(error);
+     } catch (error) {
+  console.log(error);
 
-    res.status(500).json({
-      success: false,
-      message: "Server Error",
-    });
+  if (session) {
+    await session.abortTransaction();
+    session.endSession();
   }
-};
-// Get All Products
+
+  return res.status(500).json({
+    success: false,
+    message: "Server Error",
+  });
+}
+}
 
 // Get All Products
 const getAllProducts = async (req, res) => {
@@ -373,9 +443,6 @@ const getAllProducts = async (req, res) => {
   featured,
   bestSeller,
   newArrival,
-  onSale,
-  minPrice,
-  maxPrice,
   page = 1,
   limit = 20,
   sort = "newest",
@@ -409,22 +476,12 @@ const getAllProducts = async (req, res) => {
     // Search
     // --------------------------------
 
-    if (search && search.trim()) {
-      filter.$or = [
-        {
-          name: {
-            $regex: search.trim(),
-            $options: "i",
-          },
-        },
-        {
-          sku: {
-            $regex: search.trim(),
-            $options: "i",
-          },
-        },
-      ];
-    }
+  if (search && search.trim()) {
+  filter.name = {
+    $regex: search.trim(),
+    $options: "i",
+  };
+}
 
 
     // --------------------------------
@@ -485,17 +542,17 @@ const getAllProducts = async (req, res) => {
     // Price Filter
     // --------------------------------
 
-    if (minPrice !== undefined || maxPrice !== undefined) {
-      filter.salePrice = {};
+    // if (minPrice !== undefined || maxPrice !== undefined) {
+    //   filter.salePrice = {};
 
-      if (minPrice !== undefined) {
-        filter.salePrice.$gte = Number(minPrice);
-      }
+    //   if (minPrice !== undefined) {
+    //     filter.salePrice.$gte = Number(minPrice);
+    //   }
 
-      if (maxPrice !== undefined) {
-        filter.salePrice.$lte = Number(maxPrice);
-      }
-    }
+    //   if (maxPrice !== undefined) {
+    //     filter.salePrice.$lte = Number(maxPrice);
+    //   }
+    // }
 
     // --------------------------------
 // Featured Filter
@@ -527,13 +584,13 @@ if (newArrival !== undefined) {
 // On Sale Filter
 // --------------------------------
 
-if (onSale !== undefined) {
-  if (onSale === "true") {
-    filter.$expr = {
-      $lt: ["$salePrice", "$originalPrice"],
-    };
-  }
-}
+// if (onSale !== undefined) {
+//   if (onSale === "true") {
+//     filter.$expr = {
+//       $lt: ["$salePrice", "$originalPrice"],
+//     };
+//   }
+// }
 
 
     // --------------------------------
@@ -544,21 +601,27 @@ if (onSale !== undefined) {
       createdAt: -1,
     };
 
-    if (sort === "price_low") {
-      sortOption = {
-        salePrice: 1,
-      };
-    }
+    // if (sort === "price_low") {
+    //   sortOption = {
+    //     salePrice: 1,
+    //   };
+    // }
 
-    if (sort === "price_high") {
-      sortOption = {
-        salePrice: -1,
-      };
-    }
+    // if (sort === "price_high") {
+    //   sortOption = {
+    //     salePrice: -1,
+    //   };
+    // }
 
     if (sort === "oldest") {
       sortOption = {
         createdAt: 1,
+      };
+    }
+
+    if (sort === "newest") {
+      sortOption = {
+        createdAt: -1,
       };
     }
 
@@ -590,52 +653,144 @@ if (onSale !== undefined) {
       .skip(skip)
       .limit(perPage);
 
-      const productsWithDiscount = products.map((product) => {
+      const productIds = products.map((product) => product._id);
+
+const variants = await ProductVariant.find({
+  product: { $in: productIds },
+});
+
+const productsWithVariants = products.map((product) => {
   const productObject = product.toObject();
 
-  let discountPercentage = 0;
+  const productVariants = variants.filter(
+    (variant) => variant.product.toString() === product._id.toString()
+  );
 
-  if (
-    productObject.originalPrice > 0 &&
-    productObject.salePrice < productObject.originalPrice
-  ) {
-    discountPercentage = Math.round(
-      ((productObject.originalPrice - productObject.salePrice) /
-        productObject.originalPrice) *
-        100
-    );
-  }
-const isOnSale =
-  productObject.salePrice < productObject.originalPrice;
+  return {
+    ...productObject,
+    variants: productVariants,
+  };
+});
 
-const amountSaved = isOnSale
-  ? productObject.originalPrice - productObject.salePrice
-  : 0;
+const productsWithDetails = productsWithVariants.map((product) => {
+  const productObject = { ...product };
 
-const thumbnail =
-  productObject.images.find((img) => img.isPrimary) ||
-  productObject.images[0] ||
-  null;
+  const productVariants = product.variants || [];
 
-const inStock = productObject.stock > 0;
+  const prices = productVariants
+    .map((variant) => variant.salePrice ?? variant.price)
+    .filter((price) => typeof price === "number");
 
-const stockStatus =
-  productObject.stock === 0
-    ? "Out of Stock"
-    : productObject.stock <= 5
-    ? "Low Stock"
-    : "In Stock";
+  const originalPrices = productVariants
+    .map((variant) => variant.price)
+    .filter((price) => typeof price === "number");
 
-return {
-  ...productObject,
-  thumbnail,
-  discountPercentage,
-  isOnSale,
-  amountSaved,
-  inStock,
-  stockStatus,
-};
-      });
+  const totalStock = productVariants.reduce(
+    (total, variant) => total + (variant.stock || 0),
+    0
+  );
+
+  const lowestPrice = prices.length ? Math.min(...prices) : 0;
+  const highestPrice = prices.length ? Math.max(...prices) : 0;
+
+  const lowestOriginalPrice = originalPrices.length
+    ? Math.min(...originalPrices)
+    : 0;
+
+  const isOnSale = productVariants.some(
+    (variant) =>
+      variant.salePrice !== undefined &&
+      variant.salePrice < variant.price
+  );
+
+  const discountPercentage =
+    lowestOriginalPrice > 0 && lowestPrice < lowestOriginalPrice
+      ? Math.round(
+          ((lowestOriginalPrice - lowestPrice) /
+            lowestOriginalPrice) *
+            100
+        )
+      : 0;
+
+  const amountSaved =
+    isOnSale && lowestOriginalPrice > lowestPrice
+      ? lowestOriginalPrice - lowestPrice
+      : 0;
+
+  const thumbnail =
+    productObject.images?.find((img) => img.isPrimary) ||
+    productObject.images?.[0] ||
+    null;
+
+  const inStock = totalStock > 0;
+
+  const stockStatus =
+    totalStock === 0
+      ? "Out of Stock"
+      : totalStock <= 5
+      ? "Low Stock"
+      : "In Stock";
+
+  return {
+    ...productObject,
+    price: lowestPrice,
+    maxPrice: highestPrice,
+    discountPercentage,
+    isOnSale,
+    amountSaved,
+    thumbnail,
+    totalStock,
+    inStock,
+    stockStatus,
+  };
+});
+
+//       const productsWithDiscount = products.map((product) => {
+//   const productObject = product.toObject();
+
+//   let discountPercentage = 0;
+
+//   if (
+//     productObject.originalPrice > 0 &&
+//     productObject.salePrice < productObject.originalPrice
+//   ) {
+//     discountPercentage = Math.round(
+//       ((productObject.originalPrice - productObject.salePrice) /
+//         productObject.originalPrice) *
+//         100
+//     );
+//   }
+// const isOnSale =
+//   productObject.salePrice < productObject.originalPrice;
+
+// const amountSaved = isOnSale
+//   ? productObject.originalPrice - productObject.salePrice
+//   : 0;
+
+// const thumbnail =
+//   productObject.images.find((img) => img.isPrimary) ||
+//   productObject.images[0] ||
+//   null;
+
+// const inStock = productObject.stock > 0;
+
+// const stockStatus =
+//   productObject.stock === 0
+//     ? "Out of Stock"
+//     : productObject.stock <= 5
+//     ? "Low Stock"
+//     : "In Stock";
+
+// return {
+//   ...productObject,
+//   thumbnail,
+//   discountPercentage,
+//   isOnSale,
+//   amountSaved,
+//   inStock,
+//   stockStatus,
+// };
+//       });
 
     // --------------------------------
     // Total Products
@@ -652,7 +807,7 @@ return {
 
   res.status(200).json({
   success: true,
-  count: productsWithDiscount.length,
+ count: productsWithDetails.length,
 
   pagination: {
     currentPage,
@@ -663,7 +818,7 @@ return {
     hasPreviousPage: currentPage > 1,
   },
 
-  products: productsWithDiscount,
+  products: productsWithDetails,
 });
 
   } catch (error) {
@@ -778,93 +933,184 @@ const updateProduct = async (req, res) => {
     }
 
     const {
-      name,
-      category,
-      productType,
-      subCategory,
-      fabricType,
-      brand,
-      season,
-      description,
-      originalPrice,
-      salePrice,
-      stock,
-      images,
-      featured,
-      bestSeller,
-      newArrival,
-      isActive,
-    } = req.body;
+  name,
+  category,
+  productType,
+  subCategory,
+  fabricType,
+  brand,
+  season,
+  description,
+  variants,
+  images,
+  featured,
+  bestSeller,
+  newArrival,
+  isActive,
+} = req.body;
+
+let uniqueVariantIds;
+
+if (variants !== undefined) {
+  if (!Array.isArray(variants) || variants.length === 0) {
+    return res.status(400).json({
+      success: false,
+      message: "At least one product variant is required.",
+    });
+  }
+
+  const invalidVariantId = variants.find(
+    (variantId) => !mongoose.Types.ObjectId.isValid(variantId)
+  );
+
+  if (invalidVariantId) {
+    return res.status(400).json({
+      success: false,
+      message: `Invalid Product Variant ID: ${invalidVariantId}`,
+    });
+  }
+
+  uniqueVariantIds = [
+    ...new Set(variants.map((id) => id.toString())),
+  ];
+
+  if (uniqueVariantIds.length !== variants.length) {
+    return res.status(400).json({
+      success: false,
+      message: "Duplicate product variant IDs are not allowed.",
+    });
+  }
+
+  const existingVariants = await ProductVariant.find({
+  _id: { $in: uniqueVariantIds },
+}).select("_id");
+
+if (existingVariants.length !== uniqueVariantIds.length) {
+  return res.status(404).json({
+    success: false,
+    message: "One or more product variants were not found.",
+  });
+}
+
+const alreadyLinkedVariant = await ProductVariant.findOne({
+  _id: { $in: uniqueVariantIds },
+  product: {
+    $nin: [null, product._id],
+  },
+}).select("_id product");
+
+if (alreadyLinkedVariant) {
+  return res.status(400).json({
+    success: false,
+    message:
+      "One or more product variants are already linked to another product.",
+  });
+}
+
+}
 
 
     // --------------------------------
-    // Price Validation
-    // --------------------------------
+// Validate Category & Sub Category
+// --------------------------------
 
-    const newOriginalPrice =
-      originalPrice !== undefined
-        ? originalPrice
-        : product.originalPrice;
+const newCategory = category || product.category;
+const newSubCategory = subCategory || product.subCategory;
 
-    const newSalePrice =
-      salePrice !== undefined
-        ? salePrice
-        : product.salePrice;
+// Validate Category if changed
+if (category) {
+  if (!mongoose.Types.ObjectId.isValid(category)) {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid Category ID.",
+    });
+  }
 
-    if (newOriginalPrice < 0 || newSalePrice < 0) {
-      return res.status(400).json({
-        success: false,
-        message: "Price cannot be negative.",
-      });
-    }
+  const categoryExists = await Category.findOne({
+    _id: category,
+    isDeleted: false,
+    isActive: true,
+  });
 
-    if (newSalePrice > newOriginalPrice) {
-      return res.status(400).json({
-        success: false,
-        message: "Sale price cannot be greater than original price.",
-      });
-    }
+  if (!categoryExists) {
+    return res.status(404).json({
+      success: false,
+      message: "Category not found or inactive.",
+    });
+  }
+}
+
+// Validate Sub Category
+if (subCategory) {
+  if (!mongoose.Types.ObjectId.isValid(subCategory)) {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid Sub Category ID.",
+    });
+  }
+
+  const subCategoryExists = await SubCategory.findOne({
+    _id: subCategory,
+    category: newCategory,
+    isDeleted: false,
+    isActive: true,
+  });
+
+  if (!subCategoryExists) {
+    return res.status(404).json({
+      success: false,
+      message:
+        "Sub Category not found, inactive, or does not belong to the selected category.",
+    });
+  }
+}
+
+// --------------------------------
+// Prevent Category/SubCategory Mismatch
+// --------------------------------
+
+if (category && !subCategory) {
+  const currentSubCategory = await SubCategory.findOne({
+    _id: product.subCategory,
+    category: newCategory,
+    isDeleted: false,
+    isActive: true,
+  });
+
+  if (!currentSubCategory) {
+    return res.status(400).json({
+      success: false,
+      message:
+        "You changed the category. Please select a Sub Category belonging to the new category.",
+    });
+  }
+}
+
+// --------------------------------
+// Save Category & Sub Category
+// --------------------------------
+
+if (category) {
+  product.category = category;
+}
+
+if (subCategory) {
+  product.subCategory = subCategory;
+}
 
 
-    // --------------------------------
-    // Stock Validation
-    // --------------------------------
-
-    if (stock !== undefined && stock < 0) {
-      return res.status(400).json({
-        success: false,
-        message: "Stock cannot be negative.",
-      });
-    }
-
-
-    // --------------------------------
-    // Validate Category
-    // --------------------------------
-
-    if (category) {
-      const categoryExists = await Category.findOne({
-        _id: category,
-        isDeleted: false,
-        isActive: true,
-      });
-
-      if (!categoryExists) {
-        return res.status(404).json({
-          success: false,
-          message: "Category not found or inactive.",
-        });
-      }
-
-      product.category = category;
-    }
-
-
-    // --------------------------------
+       // --------------------------------
     // Validate Product Type
     // --------------------------------
 
     if (productType) {
+      if (!mongoose.Types.ObjectId.isValid(productType)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid Product Type ID.",
+        });
+      }
+
       const productTypeExists = await ProductType.findOne({
         _id: productType,
         isDeleted: false,
@@ -882,33 +1128,19 @@ const updateProduct = async (req, res) => {
     }
 
 
-    // --------------------------------
-    // Validate Sub Category
-    // --------------------------------
-
-    if (subCategory) {
-      const subCategoryExists = await SubCategory.findOne({
-        _id: subCategory,
-        isDeleted: false,
-        isActive: true,
-      });
-
-      if (!subCategoryExists) {
-        return res.status(404).json({
-          success: false,
-          message: "Sub Category not found or inactive.",
-        });
-      }
-
-      product.subCategory = subCategory;
-    }
-
 
     // --------------------------------
     // Validate Fabric Type
     // --------------------------------
 
     if (fabricType) {
+      if (!mongoose.Types.ObjectId.isValid(fabricType)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid Fabric Type ID.",
+        });
+      }
+
       const fabricTypeExists = await FabricType.findOne({
         _id: fabricType,
         isDeleted: false,
@@ -931,6 +1163,13 @@ const updateProduct = async (req, res) => {
     // --------------------------------
 
     if (brand) {
+      if (!mongoose.Types.ObjectId.isValid(brand)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid Brand ID.",
+        });
+      }
+
       const brandExists = await Brand.findOne({
         _id: brand,
         isDeleted: false,
@@ -953,6 +1192,13 @@ const updateProduct = async (req, res) => {
     // --------------------------------
 
     if (season !== undefined) {
+
+      if (!mongoose.Types.ObjectId.isValid(season)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid Season ID.",
+        });
+      }
 
       if (season === null || season === "") {
         product.season = null;
@@ -992,19 +1238,7 @@ const updateProduct = async (req, res) => {
 
     if (description !== undefined) {
       product.description = description;
-    }
-
-    if (originalPrice !== undefined) {
-      product.originalPrice = originalPrice;
-    }
-
-    if (salePrice !== undefined) {
-      product.salePrice = salePrice;
-    }
-
-    if (stock !== undefined) {
-      product.stock = stock;
-    }
+    } 
 
    if (images !== undefined) {
 
@@ -1063,21 +1297,70 @@ if (imageUrls.length !== uniqueUrls.length) {
   product.images = images;
 }
 
-    if (featured !== undefined) {
-      product.featured = featured;
-    }
+ // --------------------------------
+// Boolean Validation
+// --------------------------------
 
-    if (bestSeller !== undefined) {
-      product.bestSeller = bestSeller;
-    }
+const booleanFields = {
+  featured,
+  bestSeller,
+  newArrival,
+  isActive,
+};
 
-    if (newArrival !== undefined) {
-      product.newArrival = newArrival;
-    }
+for (const [field, value] of Object.entries(booleanFields)) {
+  if (value !== undefined && typeof value !== "boolean") {
+    return res.status(400).json({
+      success: false,
+      message: `${field} must be true or false.`,
+    });
+  }
+}
 
-    if (isActive !== undefined) {
-      product.isActive = isActive;
+// --------------------------------
+// Update Boolean Fields
+// --------------------------------
+
+if (featured !== undefined) {
+  product.featured = featured;
+}
+
+if (bestSeller !== undefined) {
+  product.bestSeller = bestSeller;
+}
+
+if (newArrival !== undefined) {
+  product.newArrival = newArrival;
+}
+
+if (isActive !== undefined) {
+  product.isActive = isActive;
+}
+
+   // variants update logic
+if (variants !== undefined) {
+  await ProductVariant.updateMany(
+    {
+      product: product._id,
+      _id: { $nin: uniqueVariantIds },
+    },
+    {
+      $set: { product: null },
     }
+  );
+
+  await ProductVariant.updateMany(
+    {
+      _id: { $in: uniqueVariantIds },
+    },
+    {
+      $set: { product: product._id },
+    }
+  );
+
+  product.variants = uniqueVariantIds;
+}
+
 
 
     await product.save();

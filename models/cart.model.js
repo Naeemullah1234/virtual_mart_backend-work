@@ -33,15 +33,9 @@ const cartSchema = new mongoose.Schema(
 
     items: [cartItemSchema],
   },
+
   {
-    addedAt: {
-      type: Date,
-      default: Date.now
-    },
-    updatedAt: {
-      type: Date,
-      default: Date.now
-    },
+  
     timestamps: true,
   }
 );

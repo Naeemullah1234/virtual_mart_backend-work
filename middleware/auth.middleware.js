@@ -1,4 +1,4 @@
-const User = require("../models/user.model");
+const Admin = require("../models/admin.model");
 const Customer = require("../models/customer.model");
 const jwt = require("jsonwebtoken");
 
@@ -29,75 +29,92 @@ const protect = async (req, res, next) => {
       });
     }
 
-    // const user = await User.findById(decoded.id).select("-password");
+    let account;
 
-    // console.log("USER FOUND:", user);
+if (decoded.role === "admin") {
+  account = await Admin.findById(decoded.id)
+    .select("-password -refreshToken -otp -otpExpiresAt");
 
-    // if (!user) {
-    //   return res.status(401).json({
-    //     success: false,
-    //     message: "User not found.",
-    //   });
-    // }
+  console.log("ADMIN FOUND:", account);
 
-    // req.user = user;
+  if (!account) {
+    return res.status(401).json({
+      success: false,
+      message: "Admin not found.",
+    });
+  }
+} else {
+  account = await Customer.findById(decoded.id)
+    .select("-password -refreshToken -otp -otpExpiresAt");
 
+  console.log("CUSTOMER FOUND:", account);
 
-    const customer = await Customer.findById(decoded.id)
-  .select("-password -refreshToken -otp -otpExpiresAt");
-
-console.log("CUSTOMER FOUND:", customer);
-
-if (!customer) {
-  return res.status(401).json({
-    success: false,
-    message: "Customer not found.",
-  });
+  if (!account) {
+    return res.status(401).json({
+      success: false,
+      message: "Customer not found.",
+    });
+  }
 }
 
- // --------------------------------
-    // Email Verification
-    // --------------------------------
 
-    if (!customer.isEmailVerified) {
-      return res.status(403).json({
-        success: false,
-        message: "Customer email is not verified.",
-      });
-    }
+ 
+// --------------------------------
+// Email Verification
+// --------------------------------
+
+if (decoded.role === "admin") {
+  if (!account.isVerified) {
+    return res.status(403).json({
+      success: false,
+      message: "Admin email is not verified.",
+    });
+  }
+} else {
+  if (!account.isEmailVerified) {
+    return res.status(403).json({
+      success: false,
+      message: "Customer email is not verified.",
+    });
+  }
+}
+ 
+
+  
 
     // --------------------------------
     // Block Check
     // --------------------------------
 
-    if (customer.isBlocked) {
+    if (account.isBlocked) {
       return res.status(403).json({
         success: false,
-        message: "Customer account is blocked.",
+        message: "Account is blocked.",
       });
     }
 
-    // --------------------------------
-    // Active Check
-    // --------------------------------
+   // --------------------------------
+// Active Check
+// --------------------------------
 
-    if (!customer.isActive) {
-      return res.status(403).json({
-        success: false,
-        message: "Customer account is inactive.",
-      });
-    }
+if (decoded.role !== "admin" && !account.isActive) {
+  return res.status(403).json({
+    success: false,
+    message: "Customer account is inactive.",
+  });
+}
+   
 
-    // --------------------------------
-    // Deleted Check
-    // --------------------------------
+// --------------------------------
+// Deleted Check
+// --------------------------------
 
-    if (customer.isDeleted) {
-      return res.status(403).json({
-        success: false,
-        message: "Customer account has been deleted.",
-      });
-    }
+if (decoded.role !== "admin" && account.isDeleted) {
+  return res.status(403).json({
+    success: false,
+    message: "Customer account has been deleted.",
+  });
+}
 
     // --------------------------------
     // Token Version Check
@@ -105,7 +122,7 @@ if (!customer) {
 
     if (
       decoded.tokenVersion !==
-      customer.tokenVersion
+      account.tokenVersion
     ) {
       return res.status(401).json({
         success: false,
@@ -117,7 +134,7 @@ if (!customer) {
 
 
 
-req.user = customer;
+req.user = account;
 
 
     next();
@@ -125,7 +142,7 @@ req.user = customer;
 } catch (error) {
 
     console.log(
-      "CUSTOMER AUTH ERROR:",
+      "ACCOUNT AUTH ERROR:",
       error
     );
 

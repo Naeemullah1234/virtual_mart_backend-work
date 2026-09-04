@@ -90,4 +90,9 @@ const addressSchema = new mongoose.Schema(
   }
 );
 
+addressSchema.index({
+  customer: 1,
+  isDefault: 1,
+});
+
 module.exports = mongoose.model("Address", addressSchema);

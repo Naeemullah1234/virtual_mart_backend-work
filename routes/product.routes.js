@@ -2,11 +2,12 @@ const express = require("express");
 const { protect, authorize } = require("../middleware/auth.middleware");
 
 const router = express.Router();
+const upload = require("../middleware/upload.middleware");
 
 const { createProduct, getAllProducts,getProductById, updateProduct, deleteProduct, getDeletedProducts,
   restoreProduct,} = require("../controllers/product.controller");
 
-router.post("/",protect,authorize("admin"),createProduct);
+router.post("/",protect,authorize("admin"), upload.array("images", 10),createProduct);
 
 router.get("/", getAllProducts);
 

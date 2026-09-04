@@ -1,6 +1,7 @@
 const Product = require("../models/product.model");
 const ProductVariant = require("../models/productVariant.model");
-const { validateSKU,validatePrice,validateSalePrice,validateStock,validateAttributes,normalizeAttributes,validateImages,validateIsActive} = require("../validators/productVariant.validator");
+const { validateSKU,validatePrice,validateSalePrice,validateStock,
+  validateAttributes,normalizeAttributes,validateImages} = require("../validators/productVariant.validator");
 const mongoose = require("mongoose");
 
 
@@ -11,6 +12,8 @@ const createProductVariant = async (req, res) => {
   try {
   
 const { product,sku,attributes,price,salePrice,stock,images,} = req.body;
+
+
 
 
 const skuError = validateSKU(sku);
@@ -41,7 +44,7 @@ if (!mongoose.Types.ObjectId.isValid(product)) {
 if (!productExists) {
   return res.status(404).json({ success: false,message: "Product not found.",});}
 
-const existingSKU = await ProductVariant.findOne({ sku: normalizedSKU,isDeleted: false,});
+const existingSKU = await ProductVariant.findOne({ sku: normalizedSKU});
 
 
 if (existingSKU) {
@@ -72,6 +75,21 @@ if (attributesError) {
 
 const normalizedAttributes = normalizeAttributes(attributes);
 
+// --------------------------------
+// Duplicate Attribute Keys
+// --------------------------------
+
+const attributeKeys = normalizedAttributes.map(
+  (attribute) => attribute.key
+);
+
+if (new Set(attributeKeys).size !== attributeKeys.length) {
+  return res.status(400).json({
+    success: false,
+    message: "Duplicate attribute keys are not allowed.",
+  });
+}
+
 const imagesError = validateImages(images);
 
 if (imagesError) {
@@ -88,7 +106,25 @@ res.status(201).json({success: true,message: "Product variant created successful
   console.log(error);
 
   if (error.code === 11000) {
-    return res.status(400).json({ success: false,message: "SKU already exists.",});}
+  if (error.keyPattern?.sku) {
+    return res.status(400).json({
+      success: false,
+      message: "SKU already exists.",
+    });
+  }
+
+  if (error.keyPattern?.product && error.keyPattern?.attributeSignature) {
+    return res.status(400).json({
+      success: false,
+      message: "This product variant with the same attributes already exists.",
+    });
+  }
+
+  return res.status(400).json({
+    success: false,
+    message: "Duplicate product variant.",
+  });
+}
 
   return res.status(500).json({ success: false,message: "Server Error",});}}
 
@@ -106,10 +142,21 @@ if (!mongoose.Types.ObjectId.isValid(productId)) {
     message: "Invalid Product ID.",
   });
 }
+
+const productExists = await Product.findOne({
+  _id: productId,
+  isActive: true,
+  isDeleted: false,
+});
+
+if (!productExists) {
+  return res.status(404).json({
+    success: false,
+    message: "Product not found.",
+  });
+} 
 const variants = await ProductVariant.find({
   product: productId,
-  isDeleted: false,
-  isActive: true,
 }).sort({
   createdAt: -1,
 });
@@ -154,7 +201,7 @@ if (!mongoose.Types.ObjectId.isValid(variantId)) {
 
 const variant = await ProductVariant.findOne({
   _id: variantId,
-  isDeleted: false,
+ 
 });
 
 if (!variant) {
@@ -170,8 +217,7 @@ const {
   price,
   salePrice,
   stock,
-  images,
-  isActive,
+  images
 } = req.body;
 
 if (sku !== undefined) {
@@ -193,38 +239,51 @@ const normalizedSKU =
 
     
 
-if (price !== undefined) {
+const newPrice =
+  price !== undefined
+    ? Number(price)
+    : variant.price;
 
-  const priceError = validatePrice(price);
+const newSalePrice =
+  salePrice !== undefined
+    ? Number(salePrice)
+    : variant.salePrice;
 
-  if (priceError) {
-    return res.status(400).json({
-      success: false,
-      message: priceError,
-    });
-  }
+// --------------------------------
+// Price Validation
+// --------------------------------
 
+const priceError = validatePrice(newPrice);
+
+if (priceError) {
+  return res.status(400).json({
+    success: false,
+    message: priceError,
+  });
 }
 
-if (salePrice !== undefined) {
+// --------------------------------
+// Sale Price Validation
+// --------------------------------
 
-  const salePriceError = validateSalePrice(
-    price ?? variant.price,
-    salePrice
-  );
+const salePriceError = validateSalePrice(
+  newPrice,
+  newSalePrice
+);
 
-  if (salePriceError) {
-    return res.status(400).json({
-      success: false,
-      message: salePriceError,
-    });
-  }
-
+if (salePriceError) {
+  return res.status(400).json({
+    success: false,
+    message: salePriceError,
+  });
 }
+
+ let newStock;
 
 if (stock !== undefined) {
+  newStock = Number(stock);
 
-  const stockError = validateStock(stock);
+  const stockError = validateStock(newStock);
 
   if (stockError) {
     return res.status(400).json({
@@ -232,13 +291,27 @@ if (stock !== undefined) {
       message: stockError,
     });
   }
-
 }
+
 
 let normalizedAttributes;
 
-if (attributes !== undefined) {
+// if (attributes !== undefined) {
 
+//   const attributesError = validateAttributes(attributes);
+
+//   if (attributesError) {
+//     return res.status(400).json({
+//       success: false,
+//       message: attributesError,
+//     });
+//   }
+
+//   normalizedAttributes = normalizeAttributes(attributes);
+
+// }
+
+if (attributes !== undefined) {
   const attributesError = validateAttributes(attributes);
 
   if (attributesError) {
@@ -250,6 +323,17 @@ if (attributes !== undefined) {
 
   normalizedAttributes = normalizeAttributes(attributes);
 
+  // Duplicate Attribute Keys
+  const attributeKeys = normalizedAttributes.map(
+    (attribute) => attribute.key
+  );
+
+  if (new Set(attributeKeys).size !== attributeKeys.length) {
+    return res.status(400).json({
+      success: false,
+      message: "Duplicate attribute keys are not allowed.",
+    });
+  }
 }
 
 // --------------------------------
@@ -261,7 +345,7 @@ if (normalizedSKU !== undefined) {
   const existingSKU = await ProductVariant.findOne({
     sku: normalizedSKU,
     _id: { $ne: variantId },
-    isDeleted: false,
+    
   });
 
   if (existingSKU) {
@@ -279,21 +363,21 @@ if (normalizedSKU !== undefined) {
 if (normalizedSKU !== undefined) {
   variant.sku = normalizedSKU;
 }
+
 if (normalizedAttributes !== undefined) {
   variant.attributes = normalizedAttributes;
 }
 
-
 if (price !== undefined) {
-  variant.price = price;
+  variant.price = newPrice;
 }
 
 if (salePrice !== undefined) {
-  variant.salePrice = salePrice;
+  variant.salePrice = newSalePrice;
 }
 
 if (stock !== undefined) {
-  variant.stock = stock;
+  variant.stock = newStock;
 }
 
 if (images !== undefined) {
@@ -310,19 +394,19 @@ if (images !== undefined) {
   variant.images = images;
 }
 
-if (isActive !== undefined) {
+// if (isActive !== undefined) {
 
-  const isActiveError = validateIsActive(isActive);
+//   const isActiveError = validateIsActive(isActive);
 
-  if (isActiveError) {
-    return res.status(400).json({
-      success: false,
-      message: isActiveError,
-    });
-  }
+//   if (isActiveError) {
+//     return res.status(400).json({
+//       success: false,
+//       message: isActiveError,
+//     });
+//   }
 
-  variant.isActive = isActive;
-}
+//   variant.isActive = isActive;
+// }
 
 await variant.save();
 
@@ -339,12 +423,26 @@ res.status(200).json({
 
   console.log(error);
 
-  if (error.code === 11000) {
+ if (error.code === 11000) {
+  if (error.keyPattern?.sku) {
     return res.status(400).json({
       success: false,
       message: "SKU already exists.",
     });
   }
+
+  if (error.keyPattern?.product && error.keyPattern?.attributeSignature) {
+    return res.status(400).json({
+      success: false,
+      message: "This product variant with the same attributes already exists.",
+    });
+  }
+
+  return res.status(400).json({
+    success: false,
+    message: "Duplicate product variant.",
+  });
+}
 
   return res.status(500).json({
     success: false,
@@ -374,7 +472,7 @@ const deleteProductVariant = async (req, res) => {
 
     const variant = await ProductVariant.findOne({
       _id: variantId,
-      isDeleted: false,
+
     });
 
     if (!variant) {
@@ -384,14 +482,14 @@ const deleteProductVariant = async (req, res) => {
       });
     }
 
-    // --------------------------------
-    // Soft Delete
-    // --------------------------------
+  
+// --------------------------------
+// Delete Variant
+// --------------------------------
 
-    variant.isDeleted = true;
-    variant.isActive = false;
-
-    await variant.save();
+await ProductVariant.deleteOne({
+  _id: variantId,
+});
 
     // --------------------------------
     // Response
@@ -412,86 +510,7 @@ const deleteProductVariant = async (req, res) => {
     });
   }
 };
-const restoreProductVariant = async (req, res) => {
-  try {
 
-    const { variantId } = req.params;
-
-    // --------------------------------
-    // Variant ID Validation
-    // --------------------------------
-
-    if (!mongoose.Types.ObjectId.isValid(variantId)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid Variant ID.",
-      });
-    }
-
-    // --------------------------------
-    // Find Deleted Variant
-    // --------------------------------
-
-    const variant = await ProductVariant.findOne({
-      _id: variantId,
-      isDeleted: true,
-    });
-
-    if (!variant) {
-      return res.status(404).json({
-        success: false,
-        message: "Deleted product variant not found.",
-      });
-    }
-
-    // --------------------------------
-    // SKU Duplicate Validation
-    // --------------------------------
-
-    const existingSKU = await ProductVariant.findOne({
-      sku: variant.sku,
-      _id: { $ne: variantId },
-      isDeleted: false,
-    });
-
-    if (existingSKU) {
-      return res.status(400).json({
-        success: false,
-        message: "Cannot restore variant. SKU already exists.",
-      });
-    }
-
-    // --------------------------------
-    // Restore
-    // --------------------------------
-
-    variant.isDeleted = false;
-
-    await variant.save();
-
-    return res.status(200).json({
-      success: true,
-      message: "Product variant restored successfully.",
-      variant,
-    });
-
-  } catch (error) {
-
-    console.log(error);
-
-    if (error.code === 11000) {
-      return res.status(400).json({
-        success: false,
-        message: "SKU already exists.",
-      });
-    }
-
-    return res.status(500).json({
-      success: false,
-      message: "Server Error",
-    });
-  }
-};
 
 const getAllProductVariants = async (req, res) => {
   try {
@@ -500,22 +519,50 @@ const {
   page = 1,
   limit = 20,
   search = "",
-  status = "all",
   stockStatus = "all",
   productId,
-  attribute = {},
 } = req.query;
 
-    const pageNumber = Math.max(Number(page), 1);
-    const limitNumber = Math.min(Math.max(Number(limit), 1), 100);
+   const parsedPage = Number(page);
+const parsedLimit = Number(limit);
 
-    const skip = (pageNumber - 1) * limitNumber;
+if (!Number.isInteger(parsedPage) || parsedPage < 1) {
+  return res.status(400).json({
+    success: false,
+    message: "Page must be a positive whole number.",
+  });
+}
 
+if (!Number.isInteger(parsedLimit) || parsedLimit < 1) {
+  return res.status(400).json({
+    success: false,
+    message: "Limit must be a positive whole number.",
+  });
+}
+
+const pageNumber = parsedPage;
+const limitNumber = Math.min(parsedLimit, 100);
+
+const skip = (pageNumber - 1) * limitNumber;
     // --------------------------------
     // Main Filter
     // --------------------------------
 
     const filter = {};
+
+
+    // --------------------------------
+// Active Product Filter
+// --------------------------------
+
+const activeProducts = await Product.find({
+  isActive: true,
+  isDeleted: false,
+}).select("_id");
+
+filter.product = {
+  $in: activeProducts.map((product) => product._id),
+};
 
     // --------------------------------
     // Search
@@ -532,40 +579,74 @@ const {
     // Status Filter
     // --------------------------------
 
-if (status === "active") {
+//     const allowedStatuses = [
+//   "all",
+//   "active",
+//   "inactive",
+//   "deleted",
+// ];
 
-  filter.isActive = true;
-  filter.isDeleted = false;
+// if (!allowedStatuses.includes(status)) {
+//   return res.status(400).json({
+//     success: false,
+//     message: "Invalid status filter.",
+//   });
+// }
 
-} else if (status === "inactive") {
+// if (status === "active") {
 
-  filter.isActive = false;
-  filter.isDeleted = false;
+//   filter.isActive = true;
+//   filter.isDeleted = false;
 
-} else if (status === "deleted") {
+// } else if (status === "inactive") {
 
-  filter.isDeleted = true;
+//   filter.isActive = false;
+//   filter.isDeleted = false;
 
-} else {
+// } else if (status === "deleted") {
 
-  // Default / All
-  filter.isDeleted = false;
+//   filter.isDeleted = true;
 
-}
+// } else {
+
+//   // Default / All
+//   filter.isDeleted = false;
+
+// }
 
     // --------------------------------
     // Product Filter
     // --------------------------------
 
-    if (productId) {
-      filter.product = productId;
-    }
+  if (productId) {
+  if (!mongoose.Types.ObjectId.isValid(productId)) {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid Product ID.",
+    });
+  }
 
+  const productExists = await Product.findOne({
+    _id: productId,
+    isActive: true,
+    isDeleted: false,
+  });
+
+  if (!productExists) {
+    return res.status(404).json({
+      success: false,
+      message: "Product not found.",
+    });
+  }
+
+  filter.product = productId;
+}
   // --------------------------------
 // Dynamic Attribute Filters
 // --------------------------------
 
-Object.entries(req.query).forEach(([key, value]) => {
+
+  Object.entries(req.query).forEach(([key, value]) => {
 
   const match = key.match(/^attribute\[(.+)\]$/);
 
@@ -576,7 +657,7 @@ Object.entries(req.query).forEach(([key, value]) => {
   const attributeKey = match[1].trim().toLowerCase();
   const attributeValue = String(value).trim();
 
-  if (!attributeValue) {
+  if (!attributeKey || !attributeValue) {
     return;
   }
 
@@ -587,7 +668,7 @@ Object.entries(req.query).forEach(([key, value]) => {
       $elemMatch: {
         key: attributeKey,
         value: {
-          $regex: attributeValue,
+          $regex: attributeValue.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
           $options: "i",
         },
       },
@@ -597,10 +678,23 @@ Object.entries(req.query).forEach(([key, value]) => {
 });
 
 
-
     // --------------------------------
     // Stock Filter
     // --------------------------------
+
+
+    const allowedStockStatuses = [
+  "all",
+  "inStock",
+  "outOfStock",
+];
+
+if (!allowedStockStatuses.includes(stockStatus)) {
+  return res.status(400).json({
+    success: false,
+    message: "Invalid stock status filter.",
+  });
+}
 
     if (stockStatus === "outOfStock") {
 
@@ -749,46 +843,47 @@ const getProductVariantFilters = async (req, res) => {
     // --------------------------------
 
     const matchFilter = {
-      isActive: true,
-      isDeleted: false,
     };
 
     // --------------------------------
     // Dynamic Attribute Filters
     // --------------------------------
 
-    Object.entries(req.query).forEach(([key, value]) => {
+       Object.entries(req.query).forEach(([key, value]) => {
 
-      const match = key.match(/^attribute\[(.+)\]$/);
+  const match = key.match(/^attribute\[(.+)\]$/);
 
-      if (!match) {
-        return;
-      }
+  if (!match) {
+    return;
+  }
 
-      const attributeKey = match[1].trim().toLowerCase();
-      const attributeValue = String(value).trim();
+  const attributeKey = match[1].trim().toLowerCase();
+  const attributeValue = String(value).trim();
 
-      if (!attributeValue) {
-        return;
-      }
+  if (!attributeKey || !attributeValue) {
+    return;
+  }
 
-      if (!matchFilter.$and) {
-        matchFilter.$and = [];
-      }
+  if (!matchFilter.$and) {
+    matchFilter.$and = [];
+  }
 
-      matchFilter.$and.push({
-        attributes: {
-          $elemMatch: {
-            key: attributeKey,
-            value: {
-              $regex: attributeValue,
-              $options: "i",
-            },
-          },
+  matchFilter.$and.push({
+    attributes: {
+      $elemMatch: {
+        key: attributeKey,
+        value: {
+          $regex: attributeValue.replace(
+            /[.*+?^${}()|[\]\\]/g,
+            "\\$&"
+          ),
+          $options: "i",
         },
-      });
+      },
+    },
+  });
 
-    });
+});
 
     // --------------------------------
     // Aggregate
@@ -796,13 +891,43 @@ const getProductVariantFilters = async (req, res) => {
 
     const filters = await ProductVariant.aggregate([
 
-      {
-        $match: matchFilter,
-      },
+     {
+    $match: matchFilter,
+  },
 
-      {
-        $unwind: "$attributes",
-      },
+  // --------------------------------
+  // Get Parent Product
+  // --------------------------------
+
+  {
+    $lookup: {
+      from: "products",
+      localField: "product",
+      foreignField: "_id",
+      as: "product",
+    },
+  },
+
+  {
+    $unwind: "$product",
+  },
+
+  // --------------------------------
+  // Only Active Products
+  // --------------------------------
+
+  {
+    $match: {
+      "product.isActive": true,
+      "product.isDeleted": false,
+    },
+  },
+
+  {
+    $unwind: "$attributes",
+  },
+
+     
 
       {
         $group: {
@@ -886,22 +1011,49 @@ const getProductVariantById = async (req, res) => {
 
     const variant = await ProductVariant.findOne({
       _id: variantId,
-      isDeleted: false,
     }).populate({
       path: "product",
-      select: "name slug",
+      select: "name slug ",
     });
 
     // --------------------------------
     // Variant Not Found
     // --------------------------------
 
-    if (!variant) {
+    if (!variant.product) {
       return res.status(404).json({
         success: false,
         message: "Product variant not found.",
       });
     }
+
+    // --------------------------------
+// Parent Product Validation
+// --------------------------------
+
+const productExists = await Product.findOne({
+  _id: variant.product?._id,
+  isActive: true,
+  isDeleted: false,
+});
+
+if (!productExists) {
+  return res.status(404).json({
+    success: false,
+    message: "Product variant not found.",
+  });
+}
+
+if (
+  !variant.product ||
+  !variant.product.isActive ||
+  variant.product.isDeleted
+) {
+  return res.status(404).json({
+    success: false,
+    message: "Product variant not found.",
+  });
+}
 
     // --------------------------------
     // Success Response
@@ -929,7 +1081,6 @@ module.exports = {
   getProductVariants,
   updateProductVariant,
   deleteProductVariant,
-  restoreProductVariant,
   getAllProductVariants,
   getProductVariantFilters,
   getProductVariantById,
