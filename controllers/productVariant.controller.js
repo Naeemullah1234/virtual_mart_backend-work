@@ -11,7 +11,7 @@ const mongoose = require("mongoose");
 const createProductVariant = async (req, res) => {
   try {
   
-const { product,sku,attributes,price,salePrice,stock,images,} = req.body;
+const { sku,attributes,price,salePrice,stock,images,} = req.body;
 
 
 
@@ -24,7 +24,7 @@ if (skuError) {
 const normalizedSKU = sku.trim().toUpperCase();
 
 
-if ( !product || !sku || !attributes || price === undefined ||stock === undefined
+if ( !sku || !attributes || price === undefined ||stock === undefined
 ) {
 
   return res.status(400).json({ success: false,message: "Please fill all required fields.",});}
@@ -33,16 +33,6 @@ if ( !product || !sku || !attributes || price === undefined ||stock === undefine
 
 if (!Array.isArray(attributes) || attributes.length === 0) {
   return res.status(400).json({ success: false,message: "At least one attribute is required.", });}
-
-
-if (!mongoose.Types.ObjectId.isValid(product)) {
-  return res.status(400).json({ success: false,message: "Invalid Product ID.",});}
-
-
- const productExists = await Product.findOne({ _id: product,isActive: true,isDeleted: false,});
-
-if (!productExists) {
-  return res.status(404).json({ success: false,message: "Product not found.",});}
 
 const existingSKU = await ProductVariant.findOne({ sku: normalizedSKU});
 
@@ -97,7 +87,7 @@ if (imagesError) {
 
 
 
-const variant = await ProductVariant.create({ product,sku: normalizedSKU,attributes: normalizedAttributes,price,salePrice,stock,images,});
+const variant = await ProductVariant.create({ sku: normalizedSKU,attributes: normalizedAttributes,price,salePrice,stock,images,});
 
 res.status(201).json({success: true,message: "Product variant created successfully.",variant,});
 
@@ -487,6 +477,13 @@ const deleteProductVariant = async (req, res) => {
 // Delete Variant
 // --------------------------------
 
+if (variant.product) {
+  await Product.updateOne(
+    { _id: variant.product },
+    { $pull: { variants: variant._id } }
+  );
+}
+
 await ProductVariant.deleteOne({
   _id: variantId,
 });
@@ -515,16 +512,10 @@ await ProductVariant.deleteOne({
 const getAllProductVariants = async (req, res) => {
   try {
 
-const {
-  page = 1,
-  limit = 20,
-  search = "",
-  stockStatus = "all",
-  productId,
-} = req.query;
+const { page = 1, limit = 20,search = "",stockStatus = "all",productId,} = req.query;
 
    const parsedPage = Number(page);
-const parsedLimit = Number(limit);
+   const parsedLimit = Number(limit);
 
 if (!Number.isInteger(parsedPage) || parsedPage < 1) {
   return res.status(400).json({
@@ -550,19 +541,6 @@ const skip = (pageNumber - 1) * limitNumber;
 
     const filter = {};
 
-
-    // --------------------------------
-// Active Product Filter
-// --------------------------------
-
-const activeProducts = await Product.find({
-  isActive: true,
-  isDeleted: false,
-}).select("_id");
-
-filter.product = {
-  $in: activeProducts.map((product) => product._id),
-};
 
     // --------------------------------
     // Search
@@ -1020,39 +998,30 @@ const getProductVariantById = async (req, res) => {
     // Variant Not Found
     // --------------------------------
 
-    if (!variant.product) {
-      return res.status(404).json({
-        success: false,
-        message: "Product variant not found.",
-      });
-    }
+    // if (!variant.product) {
+    //   return res.status(404).json({
+    //     success: false,
+    //     message: "Product variant not found.",
+    //   });
+    // }
 
     // --------------------------------
 // Parent Product Validation
 // --------------------------------
 
-const productExists = await Product.findOne({
-  _id: variant.product?._id,
-  isActive: true,
-  isDeleted: false,
-});
-
-if (!productExists) {
-  return res.status(404).json({
-    success: false,
-    message: "Product variant not found.",
+   if (variant.product) {
+  const productExists = await Product.findOne({
+    _id: variant.product._id,
+    isActive: true,
+    isDeleted: false,
   });
-}
 
-if (
-  !variant.product ||
-  !variant.product.isActive ||
-  variant.product.isDeleted
-) {
-  return res.status(404).json({
-    success: false,
-    message: "Product variant not found.",
-  });
+  if (!productExists) {
+    return res.status(404).json({
+      success: false,
+      message: "Product variant not found.",
+    });
+  }
 }
 
     // --------------------------------

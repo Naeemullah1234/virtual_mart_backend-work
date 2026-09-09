@@ -347,16 +347,12 @@ if (!subCategoryExists) {
         });
       }
     }
+
    const slug = await generateUniqueSlug(name);
+     
 
-    // -----------------------------
-    // Generate SKU
-    // -----------------------------
-
-    // const sku = await generateSKU();
-
-     const session = await mongoose.startSession();
-    session.startTransaction();
+      session = await mongoose.startSession();
+      session.startTransaction();
 
 
     // -----------------------------
@@ -854,7 +850,8 @@ const getProductById = async (req, res) => {
       .populate("subCategory", "name slug")
       .populate("fabricType", "name slug")
       .populate("brand", "name slug")
-      .populate("season", "name slug");
+      .populate("season", "name slug")
+      .populate( "variants", "sku attributes price salePrice stock images");
 
     if (!product) {
       return res.status(404).json({
@@ -870,32 +867,72 @@ const thumbnail =
   productObject.images[0] ||
   null;
 
-const inStock = productObject.stock > 0;
+    const productVariants = productObject.variants || [];
+
+const prices = productVariants
+  .map((variant) => variant.salePrice ?? variant.price)
+  .filter((price) => typeof price === "number");
+
+const originalPrices = productVariants
+  .map((variant) => variant.price)
+  .filter((price) => typeof price === "number");
+
+const totalStock = productVariants.reduce(
+  (total, variant) => total + (variant.stock || 0),
+  0
+);
+
+const lowestPrice = prices.length ? Math.min(...prices) : 0;
+const highestPrice = prices.length ? Math.max(...prices) : 0;
+
+const lowestOriginalPrice = originalPrices.length
+  ? Math.min(...originalPrices)
+  : 0;
+
+const isOnSale = productVariants.some(
+  (variant) =>
+    variant.salePrice !== null &&
+    variant.salePrice < variant.price
+);
+
+const discountPercentage =
+  lowestOriginalPrice > 0 && lowestPrice < lowestOriginalPrice
+    ? Math.round(
+        ((lowestOriginalPrice - lowestPrice) /
+          lowestOriginalPrice) *
+          100
+      )
+    : 0;
+
+const amountSaved =
+  isOnSale && lowestOriginalPrice > lowestPrice
+    ? lowestOriginalPrice - lowestPrice
+    : 0;
+
+const inStock = totalStock > 0;
 
 const stockStatus =
-  productObject.stock === 0
+  totalStock === 0
     ? "Out of Stock"
-    : productObject.stock <= 5
+    : totalStock <= 5
     ? "Low Stock"
     : "In Stock";
 
-    const isOnSale =
-  productObject.salePrice < productObject.originalPrice;
-
-const amountSaved = isOnSale
-  ? productObject.originalPrice - productObject.salePrice
-  : 0;
-
 res.status(200).json({
   success: true,
-product: {
+  product: {
   ...productObject,
-  thumbnail,
-  inStock,
-  stockStatus,
+  price: lowestPrice,
+  maxPrice: highestPrice,
+  discountPercentage,
   isOnSale,
   amountSaved,
+  totalStock,
+  inStock,
+  stockStatus,
+  thumbnail,
 },
+
 });
 
   } catch (error) {
@@ -909,7 +946,11 @@ product: {
 };
 // Update Product
 const updateProduct = async (req, res) => {
+
+  let session;
+
   try {
+
     const { id } = req.params;
 
     // Validate Product ID
@@ -1014,8 +1055,11 @@ if (alreadyLinkedVariant) {
 // Validate Category & Sub Category
 // --------------------------------
 
-const newCategory = category || product.category;
-const newSubCategory = subCategory || product.subCategory;
+const newCategory =
+  category !== undefined ? category : product.category;
+
+const newSubCategory =
+  subCategory !== undefined ? subCategory : product.subCategory;
 
 // Validate Category if changed
 if (category) {
@@ -1069,7 +1113,7 @@ if (subCategory) {
 // Prevent Category/SubCategory Mismatch
 // --------------------------------
 
-if (category && !subCategory) {
+if (category !== undefined && subCategory === undefined) {
   const currentSubCategory = await SubCategory.findOne({
     _id: product.subCategory,
     category: newCategory,
@@ -1089,12 +1133,11 @@ if (category && !subCategory) {
 // --------------------------------
 // Save Category & Sub Category
 // --------------------------------
-
-if (category) {
+if (category !== undefined) {
   product.category = category;
 }
 
-if (subCategory) {
+if (subCategory !== undefined) {
   product.subCategory = subCategory;
 }
 
@@ -1103,7 +1146,7 @@ if (subCategory) {
     // Validate Product Type
     // --------------------------------
 
-    if (productType) {
+    if (productType !== undefined) {
       if (!mongoose.Types.ObjectId.isValid(productType)) {
         return res.status(400).json({
           success: false,
@@ -1133,7 +1176,7 @@ if (subCategory) {
     // Validate Fabric Type
     // --------------------------------
 
-    if (fabricType) {
+    if (fabricType !== undefined) {
       if (!mongoose.Types.ObjectId.isValid(fabricType)) {
         return res.status(400).json({
           success: false,
@@ -1162,7 +1205,7 @@ if (subCategory) {
     // Validate Brand
     // --------------------------------
 
-    if (brand) {
+   if (brand !== undefined) {
       if (!mongoose.Types.ObjectId.isValid(brand)) {
         return res.status(400).json({
           success: false,
@@ -1191,54 +1234,68 @@ if (subCategory) {
     // Validate Season
     // --------------------------------
 
-    if (season !== undefined) {
-
-      if (!mongoose.Types.ObjectId.isValid(season)) {
-        return res.status(400).json({
-          success: false,
-          message: "Invalid Season ID.",
-        });
-      }
-
-      if (season === null || season === "") {
-        product.season = null;
-      } else {
-        const seasonExists = await Season.findOne({
-          _id: season,
-          isDeleted: false,
-          isActive: true,
-        });
-
-        if (!seasonExists) {
-          return res.status(404).json({
-            success: false,
-            message: "Season not found or inactive.",
-          });
-        }
-
-        product.season = season;
-      }
+      if (season !== undefined) {
+  // Remove season
+  if (season === null || season === "") {
+    product.season = null;
+  } else {
+    // Validate Season ID
+    if (!mongoose.Types.ObjectId.isValid(season)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid Season ID.",
+      });
     }
+
+    const seasonExists = await Season.findOne({
+      _id: season,
+      isDeleted: false,
+      isActive: true,
+    });
+
+    if (!seasonExists) {
+      return res.status(404).json({
+        success: false,
+        message: "Season not found or inactive.",
+      });
+    }
+
+    product.season = season;
+  }
+}
 
 
     // --------------------------------
     // Update Basic Fields
     // --------------------------------
+if (name !== undefined) {
+  if (typeof name !== "string" || !name.trim()) {
+    return res.status(400).json({
+      success: false,
+      message: "Product name is required.",
+    });
+  }
 
- if (name !== undefined) {
+  const trimmedName = name.trim();
 
-  product.name = name;
+  product.name = trimmedName;
 
   product.slug = await generateUniqueSlug(
-    name,
+    trimmedName,
     product._id
   );
-
 }
 
-    if (description !== undefined) {
-      product.description = description;
-    } 
+   if (description !== undefined) {
+  if (typeof description !== "string") {
+    return res.status(400).json({
+      success: false,
+      message: "Description must be a string.",
+    });
+  }
+
+  product.description = description.trim();
+} 
 
    if (images !== undefined) {
 
@@ -1255,6 +1312,65 @@ if (subCategory) {
       message: "Maximum 10 images are allowed.",
     });
   }
+
+  for (const image of images) {
+
+  if (!image || typeof image !== "object") {
+    return res.status(400).json({
+      success: false,
+      message: "Each product image must be a valid object.",
+    });
+  }
+
+  if (
+    typeof image.filename !== "string" ||
+    !image.filename.trim()
+  ) {
+    return res.status(400).json({
+      success: false,
+      message: "Image filename is required.",
+    });
+  }
+
+  if (
+    typeof image.url !== "string" ||
+    !image.url.trim()
+  ) {
+    return res.status(400).json({
+      success: false,
+      message: "Image URL is required.",
+    });
+  }
+
+  if (
+    image.alt !== undefined &&
+    typeof image.alt !== "string"
+  ) {
+    return res.status(400).json({
+      success: false,
+      message: "Image alt must be a string.",
+    });
+  }
+
+  if (
+    image.isPrimary !== undefined &&
+    typeof image.isPrimary !== "boolean"
+  ) {
+    return res.status(400).json({
+      success: false,
+      message: "Image isPrimary must be true or false.",
+    });
+  }
+}
+
+images.forEach((image) => {
+  image.filename = image.filename.trim();
+  image.url = image.url.trim();
+
+  if (image.alt !== undefined) {
+    image.alt = image.alt.trim();
+  }
+});
 
   const primaryImages = images.filter((img) => img.isPrimary);
 
@@ -1337,8 +1453,12 @@ if (isActive !== undefined) {
   product.isActive = isActive;
 }
 
+session = await mongoose.startSession();
+session.startTransaction();
+
    // variants update logic
 if (variants !== undefined) {
+  // Old variants ko unlink karo
   await ProductVariant.updateMany(
     {
       product: product._id,
@@ -1346,29 +1466,36 @@ if (variants !== undefined) {
     },
     {
       $set: { product: null },
-    }
+    },
+    { session }
   );
 
+  // New variants ko current product ke saath link karo
   await ProductVariant.updateMany(
     {
       _id: { $in: uniqueVariantIds },
     },
     {
       $set: { product: product._id },
-    }
+    },
+    { session }
   );
 
+  // Product mein new variants ki IDs save karo
   product.variants = uniqueVariantIds;
 }
 
 
 
-    await product.save();
+   await product.save({ session });
 
 
     // --------------------------------
     // Return Updated Product
     // --------------------------------
+
+    await session.commitTransaction();
+    session.endSession();
 
     const updatedProduct = await Product.findById(product._id)
       .populate("category", "name slug")
@@ -1376,7 +1503,8 @@ if (variants !== undefined) {
       .populate("subCategory", "name slug")
       .populate("fabricType", "name slug")
       .populate("brand", "name slug")
-      .populate("season", "name slug");
+      .populate("season", "name slug")
+      .populate("variants","sku attributes price salePrice stock images");
 
 
     res.status(200).json({
@@ -1385,18 +1513,29 @@ if (variants !== undefined) {
       product: updatedProduct,
     });
 
-  } catch (error) {
-    console.log(error);
+} catch (error) {
+  console.log(error);
 
-    res.status(500).json({
-      success: false,
-      message: "Server Error",
-    });
+  if (session?.inTransaction()) {
+    await session.abortTransaction();
   }
+
+  if (session) {
+    session.endSession();
+  }
+
+  return res.status(500).json({
+    success: false,
+    message: "Server Error",
+  });
+}
 };
 
 // Soft Delete Product
 const deleteProduct = async (req, res) => {
+
+   let session;
+
   try {
     const { id } = req.params;
 
@@ -1421,13 +1560,32 @@ const deleteProduct = async (req, res) => {
       });
     }
 
+    session = await mongoose.startSession();
+     session.startTransaction();
+
     // Soft Delete
     product.isDeleted = true;
 
     // Also hide it from customers
     product.isActive = false;
 
-    await product.save();
+    // Unlink all variants from this product
+await ProductVariant.updateMany(
+  {
+    product: product._id,
+  },
+  {
+    $set: {
+      product: null,
+    },
+  },
+  { session }
+);
+
+    await product.save({ session });
+
+    await session.commitTransaction();
+    session.endSession();
 
     res.status(200).json({
       success: true,
@@ -1436,6 +1594,14 @@ const deleteProduct = async (req, res) => {
 
   } catch (error) {
     console.log(error);
+
+    if (session?.inTransaction()) {
+      await session.abortTransaction();
+    }
+
+    if (session) {
+      session.endSession();
+    }
 
     res.status(500).json({
       success: false,
@@ -1475,6 +1641,9 @@ const getDeletedProducts = async (req, res) => {
 
 // Restore Product - Admin
 const restoreProduct = async (req, res) => {
+
+   let session;
+
   try {
     const { id } = req.params;
 
@@ -1498,10 +1667,80 @@ const restoreProduct = async (req, res) => {
       });
     }
 
+    session = await mongoose.startSession();
+    session.startTransaction();
+
+    const variantIds = Array.isArray(product.variants)
+  ? product.variants
+  : [];
+
+  const existingVariants = await ProductVariant.find({
+  _id: { $in: variantIds },
+}).select("_id product");
+
+if (existingVariants.length !== variantIds.length) {
+  await session.abortTransaction();
+  session.endSession();
+
+  return res.status(404).json({
+    success: false,
+    message: "One or more product variants no longer exist.",
+  });
+}
+
+const conflictingVariant = existingVariants.find(
+  (variant) =>
+    variant.product &&
+    variant.product.toString() !== product._id.toString()
+);
+
+if (conflictingVariant) {
+  await session.abortTransaction();
+  session.endSession();
+
+  return res.status(400).json({
+    success: false,
+    message:
+      "One or more product variants are already linked to another product.",
+  });
+}
+   
+
+   if (variantIds.length === 0) {
+  await session.abortTransaction();
+  session.endSession();
+
+  return res.status(400).json({
+    success: false,
+    message: "Product has no variants to restore.",
+  });
+}
+
+await ProductVariant.updateMany(
+  { _id: { $in: variantIds } },
+  { $set: { product: product._id } },
+  { session }
+);
+
+
+
+if (variantIds.length === 0) {
+  await session.abortTransaction();
+  session.endSession();
+
+  return res.status(400).json({
+    success: false,
+    message: "Product has no variants to restore.",
+  });
+}
+
     product.isDeleted = false;
     product.isActive = true;
 
-    await product.save();
+    await product.save({ session });
+
+    await session.commitTransaction();
+      session.endSession();
 
     const restoredProduct = await Product.findById(product._id)
       .populate("category", "name slug")
@@ -1509,7 +1748,8 @@ const restoreProduct = async (req, res) => {
       .populate("subCategory", "name slug")
       .populate("fabricType", "name slug")
       .populate("brand", "name slug")
-      .populate("season", "name slug");
+      .populate("season", "name slug")
+       .populate("variants","sku attributes price salePrice stock images");
 
     res.status(200).json({
       success: true,
@@ -1518,6 +1758,14 @@ const restoreProduct = async (req, res) => {
     });
   } catch (error) {
     console.log(error);
+
+    if (session?.inTransaction()) {
+      await session.abortTransaction();
+    }
+
+    if (session) {
+      session.endSession();
+    }
 
     res.status(500).json({
       success: false,
