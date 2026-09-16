@@ -46,7 +46,18 @@ const createProduct = async (req, res) => {
   try {
     
     const {name,category,productType,subCategory,fabricType, brand,season, description,
-      featured,bestSeller,newArrival,variants,} = req.body;
+      featured,bestSeller,newArrival} = req.body;
+
+      let variants;
+
+try {
+  variants = JSON.parse(req.body.variants);
+} catch (error) {
+  return res.status(400).json({
+    success: false,
+    message: "Variants must be a valid JSON array.",
+  });
+}
 
       if (!Array.isArray(variants) || variants.length === 0) {
   return res.status(400).json({
@@ -428,6 +439,7 @@ await ProductVariant.updateMany(
 // Get All Products
 const getAllProducts = async (req, res) => {
   try {
+   
     const {
   search,
   category,
@@ -439,6 +451,11 @@ const getAllProducts = async (req, res) => {
   featured,
   bestSeller,
   newArrival,
+  minPrice,
+  maxPrice,
+  color,
+  size,
+  design,
   page = 1,
   limit = 20,
   sort = "newest",
@@ -535,22 +552,6 @@ const getAllProducts = async (req, res) => {
 
 
     // --------------------------------
-    // Price Filter
-    // --------------------------------
-
-    // if (minPrice !== undefined || maxPrice !== undefined) {
-    //   filter.salePrice = {};
-
-    //   if (minPrice !== undefined) {
-    //     filter.salePrice.$gte = Number(minPrice);
-    //   }
-
-    //   if (maxPrice !== undefined) {
-    //     filter.salePrice.$lte = Number(maxPrice);
-    //   }
-    // }
-
-    // --------------------------------
 // Featured Filter
 // --------------------------------
 
@@ -576,17 +577,104 @@ if (newArrival !== undefined) {
   filter.newArrival = newArrival === "true";
 }
 
-// --------------------------------
-// On Sale Filter
-// --------------------------------
+  // Variant Attribute Filters
 
-// if (onSale !== undefined) {
-//   if (onSale === "true") {
-//     filter.$expr = {
-//       $lt: ["$salePrice", "$originalPrice"],
-//     };
-//   }
-// }
+  const attributeFilters = [];
+
+  if (color && color.trim()) {
+    attributeFilters.push({
+      "attributes": {
+        $elemMatch: {
+          key: "color",
+          value: color.trim(),
+        },
+      },
+    });
+  }
+
+  if (size && size.trim()) {
+    attributeFilters.push({
+      "attributes": {
+        $elemMatch: {
+          key: "size",
+          value: size.trim(),
+        },
+      },
+    });
+  }
+
+  if (design && design.trim()) {
+    attributeFilters.push({
+      "attributes": {
+        $elemMatch: {
+          key: "design",
+          value: design.trim(),
+        },
+      },
+    });
+  }
+
+  if (attributeFilters.length > 0) {
+    const matchingVariants = await ProductVariant.find({
+      product: { $ne: null },
+      $and: attributeFilters,
+    }).select("product");
+
+    const matchingProductIds = matchingVariants.map(
+      (variant) => variant.product
+    );
+
+    filter._id = {
+      ...(filter._id || {}),
+      $in: matchingProductIds,
+    };
+  }
+  
+    // Price Filter
+if (minPrice !== undefined || maxPrice !== undefined) {
+  const min = minPrice !== undefined ? Number(minPrice) : 0;
+  const max =
+    maxPrice !== undefined ? Number(maxPrice) : Number.MAX_SAFE_INTEGER;
+
+  if (Number.isNaN(min) || Number.isNaN(max)) {
+    return res.status(400).json({
+      success: false,
+      message: "minPrice and maxPrice must be valid numbers.",
+    });
+  }
+
+  if (min < 0 || max < 0) {
+    return res.status(400).json({
+      success: false,
+      message: "Price cannot be negative.",
+    });
+  }
+
+  if (min > max) {
+    return res.status(400).json({
+      success: false,
+      message: "minPrice cannot be greater than maxPrice.",
+    });
+  }
+
+  const matchingVariants = await ProductVariant.find({
+    product: { $ne: null },
+  }).select("product price salePrice");
+
+  const matchingProductIds = matchingVariants
+    .filter((variant) => {
+      const effectivePrice =
+        variant.salePrice !== null && variant.salePrice !== undefined
+          ? variant.salePrice
+          : variant.price;
+
+      return effectivePrice >= min && effectivePrice <= max;
+    })
+    .map((variant) => variant.product);
+
+  filter._id = { $in: matchingProductIds };
+}
+
 
 
     // --------------------------------
@@ -597,17 +685,8 @@ if (newArrival !== undefined) {
       createdAt: -1,
     };
 
-    // if (sort === "price_low") {
-    //   sortOption = {
-    //     salePrice: 1,
-    //   };
-    // }
-
-    // if (sort === "price_high") {
-    //   sortOption = {
-    //     salePrice: -1,
-    //   };
-    // }
+   const isPriceSort =
+  sort === "price_low" || sort === "price_high";
 
     if (sort === "oldest") {
       sortOption = {
@@ -638,16 +717,28 @@ if (newArrival !== undefined) {
     // Get Products
     // --------------------------------
 
-    const products = await Product.find(filter)
-      .populate("category", "name slug")
-      .populate("productType", "name slug")
-      .populate("subCategory", "name slug")
-      .populate("fabricType", "name slug")
-      .populate("brand", "name slug")
-      .populate("season", "name slug")
-      .sort(sortOption)
-      .skip(skip)
-      .limit(perPage);
+    let products;
+
+if (isPriceSort) {
+  products = await Product.find(filter)
+    .populate("category", "name slug")
+    .populate("productType", "name slug")
+    .populate("subCategory", "name slug")
+    .populate("fabricType", "name slug")
+    .populate("brand", "name slug")
+    .populate("season", "name slug");
+} else {
+  products = await Product.find(filter)
+    .populate("category", "name slug")
+    .populate("productType", "name slug")
+    .populate("subCategory", "name slug")
+    .populate("fabricType", "name slug")
+    .populate("brand", "name slug")
+    .populate("season", "name slug")
+    .sort(sortOption)
+    .skip(skip)
+    .limit(perPage);
+}
 
       const productIds = products.map((product) => product._id);
 
@@ -741,52 +832,20 @@ const productsWithDetails = productsWithVariants.map((product) => {
   };
 });
 
-//       const productsWithDiscount = products.map((product) => {
-//   const productObject = product.toObject();
+   if (isPriceSort) {
+  productsWithDetails.sort((a, b) => {
+    if (sort === "price_low") {
+      return a.price - b.price;
+    }
 
-//   let discountPercentage = 0;
+    return b.price - a.price;
+  });
+}
 
-//   if (
-//     productObject.originalPrice > 0 &&
-//     productObject.salePrice < productObject.originalPrice
-//   ) {
-//     discountPercentage = Math.round(
-//       ((productObject.originalPrice - productObject.salePrice) /
-//         productObject.originalPrice) *
-//         100
-//     );
-//   }
-// const isOnSale =
-//   productObject.salePrice < productObject.originalPrice;
 
-// const amountSaved = isOnSale
-//   ? productObject.originalPrice - productObject.salePrice
-//   : 0;
-
-// const thumbnail =
-//   productObject.images.find((img) => img.isPrimary) ||
-//   productObject.images[0] ||
-//   null;
-
-// const inStock = productObject.stock > 0;
-
-// const stockStatus =
-//   productObject.stock === 0
-//     ? "Out of Stock"
-//     : productObject.stock <= 5
-//     ? "Low Stock"
-//     : "In Stock";
-
-// return {
-//   ...productObject,
-//   thumbnail,
-//   discountPercentage,
-//   isOnSale,
-//   amountSaved,
-//   inStock,
-//   stockStatus,
-// };
-//       });
+    const paginatedProducts = isPriceSort
+  ? productsWithDetails.slice(skip, skip + perPage)
+  : productsWithDetails;
 
     // --------------------------------
     // Total Products
@@ -803,7 +862,7 @@ const productsWithDetails = productsWithVariants.map((product) => {
 
   res.status(200).json({
   success: true,
- count: productsWithDetails.length,
+ count: paginatedProducts.length,
 
   pagination: {
     currentPage,
@@ -973,7 +1032,7 @@ const updateProduct = async (req, res) => {
       });
     }
 
-    const {
+   const {
   name,
   category,
   productType,
@@ -982,7 +1041,6 @@ const updateProduct = async (req, res) => {
   brand,
   season,
   description,
-  variants,
   images,
   featured,
   bestSeller,
@@ -990,9 +1048,23 @@ const updateProduct = async (req, res) => {
   isActive,
 } = req.body;
 
+let { variants } = req.body;
+
 let uniqueVariantIds;
 
 if (variants !== undefined) {
+  // Form-data mein variants JSON string hota hai
+  if (typeof variants === "string") {
+    try {
+      variants = JSON.parse(variants);
+    } catch (error) {
+      return res.status(400).json({
+        success: false,
+        message: "Variants must be a valid JSON array.",
+      });
+    }
+  }
+
   if (!Array.isArray(variants) || variants.length === 0) {
     return res.status(400).json({
       success: false,
@@ -1513,7 +1585,7 @@ if (variants !== undefined) {
       product: updatedProduct,
     });
 
-} catch (error) {
+     } catch (error) {
   console.log(error);
 
   if (session?.inTransaction()) {
@@ -1522,6 +1594,27 @@ if (variants !== undefined) {
 
   if (session) {
     session.endSession();
+  }
+
+  // Duplicate variant attributes
+  if (
+    error.code === 11000 &&
+    error.keyPattern?.product &&
+    error.keyPattern?.attributeSignature
+  ) {
+    return res.status(400).json({
+      success: false,
+      message:
+        "One or more product variants have duplicate attributes.",
+    });
+  }
+
+  // Duplicate SKU
+  if (error.code === 11000 && error.keyPattern?.sku) {
+    return res.status(400).json({
+      success: false,
+      message: "One or more product variants have duplicate SKU.",
+    });
   }
 
   return res.status(500).json({

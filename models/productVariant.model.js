@@ -153,6 +153,9 @@ productVariantSchema.index(
   },
   {
     unique: true,
+    partialFilterExpression: {
+      product: { $type: "objectId" },
+    },
   }
 );
 

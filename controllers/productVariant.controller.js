@@ -9,9 +9,29 @@ const mongoose = require("mongoose");
 
 
 const createProductVariant = async (req, res) => {
+
+  let attributes;
+
   try {
+
+     try {
+      attributes = JSON.parse(req.body.attributes);
+    } catch (error) {
+      return res.status(400).json({
+        success: false,
+        message: "Attributes must be a valid JSON array.",
+      });
+    }
   
-const { sku,attributes,price,salePrice,stock,images,} = req.body;
+const { sku,price: priceValue, salePrice: salePriceValue, stock: stockValue} = req.body;
+
+const price = Number(priceValue);
+const salePrice =
+  salePriceValue === undefined || salePriceValue === ""
+    ? null
+    : Number(salePriceValue);
+const stock = Number(stockValue);
+
 
 
 
@@ -80,14 +100,19 @@ if (new Set(attributeKeys).size !== attributeKeys.length) {
   });
 }
 
-const imagesError = validateImages(images);
-
-if (imagesError) {
-  return res.status(400).json({ success: false,message: imagesError,});}
 
 
+const formattedImages = (req.files || []).map((file, index) => ({
+  filename: file.filename,
+  url: `/uploads/products/${file.filename}`,
+  alt: "",
+  isPrimary: index === 0,
+}));
 
-const variant = await ProductVariant.create({ sku: normalizedSKU,attributes: normalizedAttributes,price,salePrice,stock,images,});
+
+
+
+const variant = await ProductVariant.create({ sku: normalizedSKU,attributes: normalizedAttributes,price,salePrice,stock,images: formattedImages });
 
 res.status(201).json({success: true,message: "Product variant created successfully.",variant,});
 
@@ -203,12 +228,25 @@ if (!variant) {
 
 const {
   sku,
-  attributes,
   price,
   salePrice,
-  stock,
-  images
+  stock
 } = req.body;
+
+let attributes;
+
+if (req.body.attributes !== undefined) {
+  
+  try {
+    attributes = JSON.parse(req.body.attributes);
+   
+  } catch (error) {
+    return res.status(400).json({
+      success: false,
+      message: "Attributes must be a valid JSON array.",
+    });
+  }
+}
 
 if (sku !== undefined) {
 
@@ -286,20 +324,6 @@ if (stock !== undefined) {
 
 let normalizedAttributes;
 
-// if (attributes !== undefined) {
-
-//   const attributesError = validateAttributes(attributes);
-
-//   if (attributesError) {
-//     return res.status(400).json({
-//       success: false,
-//       message: attributesError,
-//     });
-//   }
-
-//   normalizedAttributes = normalizeAttributes(attributes);
-
-// }
 
 if (attributes !== undefined) {
   const attributesError = validateAttributes(attributes);
@@ -370,33 +394,18 @@ if (stock !== undefined) {
   variant.stock = newStock;
 }
 
-if (images !== undefined) {
+if (req.files && req.files.length > 0) {
 
-  const imagesError = validateImages(images);
+  const formattedImages = req.files.map((file, index) => ({
+    filename: file.filename,
+    url: `/uploads/products/${file.filename}`,
+    alt: "",
+    isPrimary: index === 0,
+  }));
 
-  if (imagesError) {
-    return res.status(400).json({
-      success: false,
-      message: imagesError,
-    });
-  }
-
-  variant.images = images;
+  variant.images = formattedImages;
 }
 
-// if (isActive !== undefined) {
-
-//   const isActiveError = validateIsActive(isActive);
-
-//   if (isActiveError) {
-//     return res.status(400).json({
-//       success: false,
-//       message: isActiveError,
-//     });
-//   }
-
-//   variant.isActive = isActive;
-// }
 
 await variant.save();
 

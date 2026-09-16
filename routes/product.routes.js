@@ -9,15 +9,19 @@ const { createProduct, getAllProducts,getProductById, updateProduct, deleteProdu
 
 router.post("/",protect,authorize("admin"), upload.array("images", 10),createProduct);
 
+ router.put("/:id",protect,authorize("admin"),upload.array("images", 10),updateProduct);
+
 router.get("/", getAllProducts);
 
 router.get("/deleted",protect,authorize("admin"),getDeletedProducts);
 
  router.put("/:id/restore",protect,authorize("admin"),restoreProduct);
 
+
+
 router.get("/:id", getProductById);
 
- router.put("/:id",protect,authorize("admin"),updateProduct);
+ 
 
  router.delete("/:id",protect,authorize("admin"),deleteProduct);
 
