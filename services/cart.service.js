@@ -15,12 +15,19 @@ const calculateCartSummary = (cart) => {
 
     totalItems += item.quantity;
 
+  if (!item.variant) continue;
+
     const price =
-      item.product.salePrice || item.product.price;
+  item.variant.salePrice ?? item.variant.price;
 
-    subtotal += price * item.quantity;
+const itemTotal = price * item.quantity;
 
-    validItems.push(item);
+subtotal += itemTotal;
+
+validItems.push({
+  ...item.toObject(),
+  itemTotal,
+});
   }
 
   return {

@@ -2,45 +2,63 @@ const nodemailer = require("nodemailer");
 
 
 
-const transporter = nodemailer.createTransport({ service: "gmail", auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS,},});
+const transporter = nodemailer.createTransport({
+  host: "smtp.gmail.com",
+  port: 587,
+  secure: false,
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS,
+  },
+});
 
 const sendOTPEmail = async (email, otp) => {
+  try {
+    const mailOptions = {
+      from: `"Virtual Mart" <${process.env.EMAIL_USER}>`,
+      to: email,
 
-  const mailOptions = { from: `"Virtual Mart" <${process.env.EMAIL_USER}>`, to: email,
+      subject: "CHECK MART Email Verification OTP",
 
-    subject: "CHECK MART Email Verification OTP",
+      html: `
+        <div style="font-family: Arial, sans-serif;">
+          <h2>Check Mart Email Verification</h2>
 
-    html: `
-      <div style="font-family: Arial, sans-serif;">
+          <p>Your verification OTP is:</p>
 
-        <h2>Check Mart Email Verification</h2>
+          <h1 style="letter-spacing: 5px;">
+            ${otp}
+          </h1>
 
-        <p>Your verification OTP is:</p>
+          <p>
+            This OTP will expire in
+            <strong>10 minutes</strong>.
+          </p>
 
-        <h1 style="letter-spacing: 5px;">
-          ${otp}
-        </h1>
+          <p>
+            Please Don't Share This OTP with anyone else.
+          </p>
 
-        <p>
-          This OTP will expire in
-          <strong>10 minutes</strong>.
-        </p>
+          <p>
+            If you did not request this OTP,
+            please ignore this email.
+          </p>
+        </div>
+      `,
+    };
 
-         <p>
-          Please Don't Share This OTP with anyone else.
-        </p>
+    await transporter.sendMail(mailOptions);
 
-        <p>
-          If you did not request this OTP,
-          please ignore this email.
-        </p>
+  } catch (error) {
+    console.log("========== EMAIL ERROR ==========");
+    console.log(error);
+    console.log("=================================");
 
-      </div>
-    `,
-  };
-
-  await transporter.sendMail(mailOptions);
+    throw error;
+  }
 };
+
+   
 
 
 module.exports = {

@@ -21,6 +21,7 @@
     "multer": "^2.3.0",
     "node-cron": "^4.6.0",
     "nodemailer": "^9.0.5",
+    "resend": "^6.30.0",
     "slugify": "^1.6.9"
   },
   "devDependencies": {

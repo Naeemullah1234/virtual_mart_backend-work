@@ -1,6 +1,7 @@
 const Cart = require("../models/cart.model");
 const {validateProductId,validateQuantity,} = require("../validators/cart.validator");
 const Product = require("../models/product.model");
+const ProductVariant = require("../models/productVariant.model");
 const { calculateCartSummary,} = require("../services/cart.service");
 
 
@@ -8,7 +9,7 @@ const { calculateCartSummary,} = require("../services/cart.service");
 const addToCart = async (req, res) => {
   try {
 
-  const { productId,quantity,} = req.body;
+  const { productId, variantId, quantity } = req.body;
 
 const productIdError = validateProductId(productId);
 
@@ -16,6 +17,15 @@ if (productIdError) {
   return res.status(400).json({
     success: false,
     message: productIdError,
+  });
+}
+
+const variantIdError = validateProductId(variantId);
+
+if (variantIdError) {
+  return res.status(400).json({
+    success: false,
+    message: "Invalid Variant ID.",
   });
 }
 
@@ -30,6 +40,19 @@ if (quantityError) {
 }
 
 const product = await Product.findById(productId);
+
+const variant = await ProductVariant.findOne({
+  _id: variantId,
+  product: productId,
+});
+
+if (!variant) {
+  return res.status(404).json({
+    success: false,
+    message: "Product variant not found or does not belong to this product.",
+  });
+}
+
 
 if (!product) {
   return res.status(404).json({
@@ -52,13 +75,13 @@ if (product.isDeleted) {
   });
 }
 
-if (product.stock < quantity) {
+
+if (variant.stock < quantity) {
   return res.status(400).json({
     success: false,
-    message: "Insufficient stock.",
+    message: `Only ${variant.stock} item(s) available in stock.`,
   });
 }
-
 
 let cart = await Cart.findOne({
   customer: req.user._id,
@@ -74,12 +97,10 @@ if (!cart) {
 
 }
 
-const existingItem = cart.items.find(
-
+  const existingItem = cart.items.find(
   (item) =>
-
-    item.product.toString() === productId
-
+    item.product.toString() === productId &&
+    item.variant.toString() === variantId
 );
 
 
@@ -88,32 +109,29 @@ if (existingItem) {
 
   const newQuantity = existingItem.quantity + quantity;
 
-  if (newQuantity > product.stock) {
-    return res.status(400).json({
-      success: false,
-      message: `Only ${product.stock} item(s) available in stock.`,
-    });
-  }
+  if (newQuantity > variant.stock) {
+  return res.status(400).json({
+    success: false,
+    message: `Only ${variant.stock} item(s) available in stock.`,
+  });
+}
 
   existingItem.quantity = newQuantity;
 
 } else {
 
-  if (quantity > product.stock) {
+  if (quantity > variant.stock) {
     return res.status(400).json({
       success: false,
-      message: `Only ${product.stock} item(s) available in stock.`,
+      message: `Only ${variant.stock} item(s) available in stock.`,
     });
   }
 
   cart.items.push({
-    product: productId,
-    variant: {
-    size: " ",
-    color: " "
-  },
-    quantity,
-  });
+  product: productId,
+  variant: variantId,
+  quantity,
+});
 }
 
 await cart.save();
@@ -145,14 +163,19 @@ const getCart = async (req, res) => {
 
   const cart = await Cart.findOne({
   customer: req.user._id,
-}).populate({
-  path: "items.product",
-  select: "name slug price salePrice images stock",
+})
+  .populate({
+    path: "items.product",
+    select: "name slug images isActive isDeleted",
     match: {
-    isDeleted: false,
-    isActive: true,
-  },
-});
+      isDeleted: false,
+      isActive: true,
+    },
+  })
+  .populate({
+    path: "items.variant",
+    select: "sku attributes price salePrice stock images",
+  });
 
 
 if (!cart) {
@@ -191,21 +214,19 @@ res.status(200).json({
 const updateCartQuantity = async (req, res) => {
   try {
 
-const { productId,quantity,} = req.body;
+const { productId, variantId, quantity } = req.body;
 // --------------------------------
 // Required Fields Validation
 // --------------------------------
 
-if (!productId || quantity === undefined) {
+if (!productId || !variantId || quantity === undefined) {
   return res.status(400).json({
     success: false,
-    message: "Product ID and quantity are required.",
+    message: "Product ID, Variant ID and quantity are required.",
   });
 }
 
-// --------------------------------
-// Quantity Validation
-// --------------------------------
+
 
 if (!Number.isInteger(quantity) || quantity < 1) {
   return res.status(400).json({
@@ -213,9 +234,7 @@ if (!Number.isInteger(quantity) || quantity < 1) {
     message: "Quantity must be an integer greater than or equal to 1.",
   });
 }
-// --------------------------------
-// Find Customer Cart
-// --------------------------------
+
 
 const cart = await Cart.findOne({
   customer: req.user._id,
@@ -228,12 +247,12 @@ if (!cart) {
   });
 }
 
-// --------------------------------
-// Find Cart Item
-// --------------------------------
 
-const cartItem = cart.items.find(
-  (item) => item.product.toString() === productId
+
+ const cartItem = cart.items.find(
+  (item) =>
+    item.product.toString() === productId &&
+    item.variant.toString() === variantId
 );
 
 if (!cartItem) {
@@ -260,13 +279,29 @@ if (!product) {
 }
 
 // --------------------------------
+// Find Variant
+// --------------------------------
+
+const variant = await ProductVariant.findOne({
+  _id: variantId,
+  product: productId,
+});
+
+if (!variant) {
+  return res.status(404).json({
+    success: false,
+    message: "Product variant not found or does not belong to this product.",
+  });
+}
+
+// --------------------------------
 // Stock Validation
 // --------------------------------
 
-if (quantity > product.stock) {
+if (quantity > variant.stock) {
   return res.status(400).json({
     success: false,
-    message: `Only ${product.stock} item(s) available in stock.`,
+    message: `Only ${variant.stock} item(s) available in stock.`,
   });
 }
 
@@ -306,7 +341,7 @@ const removeCartItem = async (req, res) => {
 // Get Product ID
 // --------------------------------
 
-const { productId } = req.params;
+const { variantId } = req.params;
 
 // --------------------------------
 // Find Customer Cart
@@ -328,7 +363,7 @@ if (!cart) {
 // --------------------------------
 
 const cartItem = cart.items.find(
-  (item) => item.product.toString() === productId
+  (item) => item.variant.toString() === variantId
 );
 
 if (!cartItem) {
@@ -342,7 +377,7 @@ if (!cartItem) {
 // --------------------------------
 
 cart.items = cart.items.filter(
-  (item) => item.product.toString() !== productId
+  (item) => item.variant.toString() !== variantId
 );
 
 await cart.save();

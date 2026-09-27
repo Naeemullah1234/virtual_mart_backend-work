@@ -4,209 +4,427 @@ const jwt = require("jsonwebtoken");
 const { validateName,validateEmail,validatePhone,validatePassword,} = require("../validators/admin.validator");
 const {generateOTP,getOTPExpiry,} = require("../utils/otp");
 const {sendOTPEmail,} = require("../utils/sendEmail");
-
+const pendingAdminSignups = new Map();
 
 
 
 const createAdmin = async (req, res) => {
   try {
+    const {
+      firstName,
+      lastName,
+      email,
+      phone,
+      password,
+      avatar,
+    } = req.body;
 
-    const {firstName,lastName,email,phone,password,avatar,} = req.body;
+    console.log("CREATE ADMIN BODY:", req.body);
 
+    // --------------------------------
+    // Required Fields
+    // --------------------------------
 
     if (
-      !firstName ||!lastName ||!email ||!phone||!password ) {
+      !firstName ||
+      !lastName ||
+      !email ||
+      !phone ||
+      !password
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Please fill all required fields.",
+      });
+    }
 
-      return res.status(400).json({success: false, message: "Please fill all required fields.",});}
+    // --------------------------------
+    // Name Validation
+    // --------------------------------
 
-
-    const firstNameError = validateName( firstName,"First name");
+    const firstNameError = validateName(firstName, "First name");
 
     if (firstNameError) {
-      return res.status(400).json({success: false,message: firstNameError,});}
+      return res.status(400).json({
+        success: false,
+        message: firstNameError,
+      });
+    }
 
-
-    const lastNameError = validateName( lastName,"Last name");
+    const lastNameError = validateName(lastName, "Last name");
 
     if (lastNameError) {
-      return res.status(400).json({success: false,message: lastNameError,});}
+      return res.status(400).json({
+        success: false,
+        message: lastNameError,
+      });
+    }
 
+    // --------------------------------
+    // Email Validation
+    // --------------------------------
 
     const emailError = validateEmail(email);
 
     if (emailError) {
-      return res.status(400).json({success: false,message: emailError,});}
+      return res.status(400).json({
+        success: false,
+        message: emailError,
+      });
+    }
 
+    // --------------------------------
+    // Phone Validation
+    // --------------------------------
 
     const phoneError = validatePhone(phone);
 
     if (phoneError) {
-      return res.status(400).json({ success: false, message: phoneError,});}
+      return res.status(400).json({
+        success: false,
+        message: phoneError,
+      });
+    }
+
+    // --------------------------------
+    // Password Validation
+    // --------------------------------
 
     const passwordError = validatePassword(password);
 
     if (passwordError) {
-      return res.status(400).json({ success: false,message: passwordError,});}
-
+      return res.status(400).json({
+        success: false,
+        message: passwordError,
+      });
+    }
 
     const normalizedEmail = email.trim().toLowerCase();
-
     const normalizedPhone = phone.trim();
 
+    // --------------------------------
+    // Check Existing Permanent Admin
+    // --------------------------------
 
-    const existingEmail = await Admin.findOne({ email: normalizedEmail,});
+    const existingEmail = await Admin.findOne({
+      email: normalizedEmail,
+    });
 
     if (existingEmail) {
-      return res.status(400).json({success: false, message: "Email already exists.", });}
+      return res.status(400).json({
+        success: false,
+        message: "Email already exists.",
+      });
+    }
 
-
-    const existingPhone = await Admin.findOne({ phone: normalizedPhone,});
+    const existingPhone = await Admin.findOne({
+      phone: normalizedPhone,
+    });
 
     if (existingPhone) {
-      return res.status(400).json({ success: false,message: "Phone number already exists.",});}
+      return res.status(400).json({
+        success: false,
+        message: "Phone number already exists.",
+      });
+    }
 
+    // --------------------------------
+    // Hash Password
+    // --------------------------------
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
+    // --------------------------------
+    // Generate OTP
+    // --------------------------------
 
     const otp = generateOTP();
-
     const otpExpiresAt = getOTPExpiry();
 
+    // --------------------------------
+    // TEMPORARY SIGNUP DATA
+    // --------------------------------
+    // IMPORTANT:
+    // Admin is NOT saved to MongoDB here.
+    // Data is temporarily stored in Map.
 
-    const admin = await Admin.create({ firstName: firstName.trim(), lastName: lastName.trim(), email: normalizedEmail,
+   pendingAdminSignups.set(normalizedEmail, {
+  firstName: firstName.trim(),
+  lastName: lastName.trim(),
+  email: normalizedEmail,
+  phone: normalizedPhone,
+  password: hashedPassword,
+  avatar: avatar || "",
+  otp,
+  otpExpiresAt,
+  otpResendAvailableAt: new Date(
+    Date.now() + 60 * 1000
+  ),
+});
 
-      phone: normalizedPhone, password: hashedPassword, avatar: avatar || "", role: "admin", isVerified: false, otp, otpExpiresAt,  otpPurpose: "verification", });
-
+    // --------------------------------
+    // Send OTP Email
+    // --------------------------------
 
     try {
-
-      await sendOTPEmail( normalizedEmail, otp );
-
+      await sendOTPEmail(normalizedEmail, otp);
     } catch (emailError) {
+      console.log("OTP EMAIL ERROR:", emailError);
 
-      console.log( "OTP EMAIL ERROR:",emailError);
+      // Remove temporary signup
+      pendingAdminSignups.delete(normalizedEmail);
 
-       await Admin.findByIdAndDelete(admin._id);
+      return res.status(500).json({
+        success: false,
+        message: "OTP could not be sent. Please try again.",
+      });
+    }
 
-      return res.status(500).json({ success: false,message:"Admin could not be created because OTP email could not be sent.",});}
+    // --------------------------------
+    // Success
+    // --------------------------------
 
-
-    return res.status(201).json({ success: true, message:"Admin created successfully. OTP has been sent to your email.", adminId: admin._id, email: admin.email,});
+    return res.status(200).json({
+      success: true,
+      message: "OTP has been sent to your email. Please verify your OTP.",
+      email: normalizedEmail,
+    });
 
   } catch (error) {
+    console.log("CREATE ADMIN ERROR:", error);
 
-    console.log(error);
-
-
-    if (error.code === 11000) {
-
-      return res.status(400).json({success: false,message:  "Admin email or phone already exists.",}); }
-
-      return res.status(500).json({success: false,message: "Server Error",}); }};
-
+    return res.status(500).json({
+      success: false,
+      message: "Server Error",
+    });
+  }
+};
 
 
-    const verifyAdminOTP = async (req, res) => {
-    try {
 
+ 
+
+const verifyAdminOTP = async (req, res) => {
+  try {
     const { email, otp } = req.body;
 
-  
+    // --------------------------------
+    // Required Fields
+    // --------------------------------
 
     if (!email || !otp) {
-      return res.status(400).json({ success: false, message: "Email and OTP are required.",});}
+      return res.status(400).json({
+        success: false,
+        message: "Email and OTP are required.",
+      });
+    }
 
-    
+    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedOTP = String(otp).trim();
 
-    const admin = await Admin.findOne({ email: email.trim().toLowerCase(),});
+    // --------------------------------
+    // Find Temporary Signup
+    // --------------------------------
 
-    if (!admin) {
-      return res.status(404).json({ success: false,message: "Admin not found.",});}
+    const pendingAdmin = pendingAdminSignups.get(normalizedEmail);
 
+    if (!pendingAdmin) {
+      return res.status(404).json({
+        success: false,
+        message:
+          "Signup request not found or expired. Please signup again.",
+      });
+    }
 
-    if (admin.isVerified) {
-      return res.status(400).json({ success: false, message: "Admin email is already verified.",});}
-
-
-    if (admin.otp !== otp.trim()) {
-      return res.status(400).json({ success: false, message: "Invalid OTP.",});}
+    // --------------------------------
+    // Check OTP Expiry
+    // --------------------------------
 
     if (
-      !admin.otpExpiresAt ||
-      admin.otpExpiresAt < new Date()
+      !pendingAdmin.otpExpiresAt ||
+      pendingAdmin.otpExpiresAt < new Date()
     ) {
-      return res.status(400).json({ success: false, message: "OTP has expired. Please request a new OTP.",});}
+      pendingAdminSignups.delete(normalizedEmail);
 
+      return res.status(400).json({
+        success: false,
+        message: "OTP has expired. Please signup again.",
+      });
+    }
 
-    admin.isVerified = true;
+    // --------------------------------
+    // Check OTP
+    // --------------------------------
 
-    admin.otp = null;
+    if (pendingAdmin.otp !== normalizedOTP) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid OTP.",
+      });
+    }
 
-    admin.otpExpiresAt = null;
+    // --------------------------------
+    // OTP VERIFIED
+    // NOW CREATE PERMANENT ADMIN
+    // --------------------------------
 
-    await admin.save();
+    const admin = await Admin.create({
+      firstName: pendingAdmin.firstName,
+      lastName: pendingAdmin.lastName,
+      email: pendingAdmin.email,
+      phone: pendingAdmin.phone,
+      password: pendingAdmin.password,
+      avatar: pendingAdmin.avatar,
+      role: "admin",
+      isVerified: true,
+    });
 
+    // --------------------------------
+    // Remove Temporary Signup
+    // --------------------------------
 
-    return res.status(200).json({ success: true, message: "Admin email verified successfully.",});
+    pendingAdminSignups.delete(normalizedEmail);
+
+    // --------------------------------
+    // Success
+    // --------------------------------
+
+    return res.status(201).json({
+      success: true,
+      message: "Admin account verified and created successfully.",
+      admin: {
+        id: admin._id,
+        firstName: admin.firstName,
+        lastName: admin.lastName,
+        email: admin.email,
+        phone: admin.phone,
+        avatar: admin.avatar,
+        role: admin.role,
+        isVerified: admin.isVerified,
+      },
+    });
 
   } catch (error) {
+    console.log("VERIFY ADMIN OTP ERROR:", error);
 
+    if (error.code === 11000) {
+      return res.status(400).json({
+        success: false,
+        message: "Admin email or phone already exists.",
+      });
+    }
 
-    return res.status(500).json({ success: false,message: "Server Error",});}};
+    return res.status(500).json({
+      success: false,
+      message: "Server Error",
+    });
+  }
+};
 
-   const resendAdminOTP = async (req, res) => {
+ 
+  const resendAdminOTP = async (req, res) => {
   try {
-
     const { email } = req.body;
 
+    // --------------------------------
+    // Required Field
+    // --------------------------------
 
     if (!email) {
-      return res.status(400).json({ success: false, message: "Email is required.",});}
+      return res.status(400).json({
+        success: false,
+        message: "Email is required.",
+      });
+    }
 
     const normalizedEmail = email.trim().toLowerCase();
 
-    const admin = await Admin.findOne({ email: normalizedEmail,});
+    // --------------------------------
+    // Find Temporary Signup
+    // --------------------------------
 
-    if (!admin) {
-      return res.status(404).json({ success: false,message: "Admin not found.",});}
+    const pendingAdmin = pendingAdminSignups.get(normalizedEmail);
 
+    if (!pendingAdmin) {
+      return res.status(404).json({
+        success: false,
+        message:
+          "Signup request not found or expired. Please signup again.",
+      });
+    }
 
-    if (admin.isVerified) {
-      return res.status(400).json({ success: false,message: "Admin email is already verified.",});}
+    // --------------------------------
+    // Resend Cooldown
+    // --------------------------------
 
-   
+    if (
+      pendingAdmin.otpResendAvailableAt &&
+      new Date() < pendingAdmin.otpResendAvailableAt
+    ) {
+      const remainingSeconds = Math.ceil(
+        (pendingAdmin.otpResendAvailableAt.getTime() -
+          Date.now()) /
+          1000
+      );
 
-    const otp = Math.floor( 100000 + Math.random() * 900000).toString();
+      return res.status(429).json({
+        success: false,
+        message: `Please wait ${remainingSeconds} seconds before requesting another OTP.`,
+      });
+    }
 
-    const otpExpiresAt = new Date( Date.now() + 10 * 60 * 1000);
+    // --------------------------------
+    // Generate New OTP
+    // --------------------------------
 
-    admin.otp = otp;
+    const otp = generateOTP();
+    const otpExpiresAt = getOTPExpiry();
 
-    admin.otpExpiresAt = otpExpiresAt;
+    pendingAdmin.otp = otp;
+    pendingAdmin.otpExpiresAt = otpExpiresAt;
 
-    await admin.save();
+    // 60 seconds resend cooldown
+    pendingAdmin.otpResendAvailableAt = new Date(
+      Date.now() + 60 * 1000
+    );
 
+    // --------------------------------
+    // Send New OTP
+    // --------------------------------
 
     try {
-
-      await sendOTPEmail( admin.email, otp);
-
+      await sendOTPEmail(
+        pendingAdmin.email,
+        otp
+      );
     } catch (emailError) {
-
       console.log("RESEND OTP EMAIL ERROR:", emailError);
 
-      return res.status(500).json({ success: false,message: "OTP could not be sent. Please try again.",});}
+      return res.status(500).json({
+        success: false,
+        message: "OTP could not be sent. Please try again.",
+      });
+    }
 
+    // --------------------------------
+    // Success
+    // --------------------------------
 
-    return res.status(200).json({ success: true,message: "New OTP has been sent to your email.",});
+    return res.status(200).json({
+      success: true,
+      message: "A new OTP has been sent to your email.",
+    });
 
   } catch (error) {
+    console.log("RESEND ADMIN OTP ERROR:", error);
 
-    console.log(error);
-
-    return res.status(500).json({ success: false, message: "Server Error",});}};
-
+    return res.status(500).json({
+      success: false,
+      message: "Server Error",
+    });
+  }
+};
+ 
 
    const loginAdmin = async (req, res) => {
   try {
@@ -361,10 +579,29 @@ const forgotAdminPassword = async (req, res) => {
       return res.status(404).json({ success: false, message: "Admin not found.",});}
 
 
-    if (admin.isBlocked) {
-      return res.status(403).json({ success: false, message: "Your admin account has been blocked.", });}
+         if (admin.isBlocked) {
+  return res.status(403).json({
+    success: false,
+    message: "Your admin account has been blocked.",
+  });
+}
 
-    const otp = generateOTP();
+// OTP resend cooldown check
+if (
+  admin.otpResendAvailableAt &&
+  new Date() < admin.otpResendAvailableAt
+) {
+  const remainingSeconds = Math.ceil(
+    (admin.otpResendAvailableAt.getTime() - Date.now()) / 1000
+  );
+
+  return res.status(429).json({
+    success: false,
+    message: `Please wait ${remainingSeconds} seconds before requesting another OTP.`,
+  });
+}
+
+const otp = generateOTP();
 
     const otpExpiresAt = new Date(
       Date.now() + 10 * 60 * 1000
@@ -373,6 +610,9 @@ const forgotAdminPassword = async (req, res) => {
     admin.otp = otp;
     admin.otpExpiresAt = otpExpiresAt;
     admin.otpPurpose = "forgotPassword";
+    admin.otpResendAvailableAt = new Date(
+      Date.now() + 60 * 1000
+    );
 
     await admin.save();
 
@@ -664,4 +904,5 @@ const changeAdminPassword = async (req, res) => {
 
     return res.status(500).json({ success: false, message: "Server Error.",});}};
 
-module.exports = { createAdmin,verifyAdminOTP,resendAdminOTP,loginAdmin,getAdminProfile,logoutAdmin, refreshAdminToken,forgotAdminPassword,verifyForgotPasswordOTP,resetAdminPassword,resendForgotPasswordOTP,getCurrentAdmin,changeAdminPassword};
+module.exports = { createAdmin,verifyAdminOTP,resendAdminOTP,
+  loginAdmin,getAdminProfile,logoutAdmin, refreshAdminToken,forgotAdminPassword,verifyForgotPasswordOTP,resetAdminPassword,resendForgotPasswordOTP,getCurrentAdmin,changeAdminPassword};

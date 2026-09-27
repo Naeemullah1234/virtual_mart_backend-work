@@ -9,7 +9,7 @@ const {addToCart,getCart,updateCartQuantity,removeCartItem,clearCart} = require(
 router.post("/",protect,addToCart);
 router.get("/",protect,getCart);
 router.patch("/",protect,updateCartQuantity);
-router.delete("/:productId",protect,removeCartItem);
+router.delete("/:variantId", protect, removeCartItem);
 router.delete("/",protect,clearCart);
 
 module.exports = router;
