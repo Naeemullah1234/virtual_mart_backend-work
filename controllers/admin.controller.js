@@ -460,7 +460,18 @@ const verifyAdminOTP = async (req, res) => {
 
  
 
-    const accessToken = jwt.sign({ id: admin._id,role: "admin", tokenVersion: admin.tokenVersion, },process.env.JWT_SECRET,{ expiresIn: "15m",});
+    const accessToken = jwt.sign({ 
+       id: admin._id,role: "admin", tokenVersion: admin.tokenVersion, },process.env.JWT_SECRET,{ expiresIn: "15m",});
+
+       console.log("========== LOGIN TOKEN TIME ==========");
+console.log("NOW:", new Date());
+console.log("ACCESS TOKEN IAT:", jwt.decode(accessToken)?.iat);
+console.log("ACCESS TOKEN EXP:", jwt.decode(accessToken)?.exp);
+console.log(
+  "ACCESS TOKEN EXP DATE:",
+  new Date(jwt.decode(accessToken)?.exp * 1000)
+);
+console.log("======================================");
 
 
     const refreshToken = jwt.sign( { id: admin._id, role: "admin",},process.env.JWT_REFRESH_SECRET, { expiresIn: "7d", });
@@ -541,7 +552,15 @@ const refreshAdminToken = async (req, res) => {
       return res.status(401).json({ success: false, message: "Invalid refresh token.",}); }
 
 
-    const accessToken = jwt.sign({ id: admin._id, role: "admin", }, process.env.JWT_SECRET, { expiresIn: "15m",});
+    const accessToken = jwt.sign(
+  {
+    id: admin._id,
+    role: "admin",
+    tokenVersion: admin.tokenVersion,
+  },
+  process.env.JWT_SECRET,
+  { expiresIn: "15m" }
+);
 
   
 

@@ -58,9 +58,73 @@ const sendOTPEmail = async (email, otp) => {
   }
 };
 
-   
+  const sendInvoiceEmail = async (email, order, invoiceFilePath) => {
+  try {
+    const mailOptions = {
+      from: `"Virtual Mart" <${process.env.EMAIL_USER}>`,
+      to: email,
+
+      subject: `Virtual Mart Invoice - ${order.orderNumber}`,
+
+      html: `
+        <div style="font-family: Arial, sans-serif; color: #333;">
+
+          <h2>Virtual Mart</h2>
+
+          <p>Dear ${order.shippingAddress.fullName},</p>
+
+          <p>
+            Thank you for shopping with Virtual Mart.
+          </p>
+
+          <p>
+            Your order has been placed successfully.
+          </p>
+
+          <p>
+            <strong>Order Number:</strong>
+            ${order.orderNumber}
+          </p>
+
+          <p>
+            <strong>Grand Total:</strong>
+            Rs. ${order.grandTotal.toFixed(2)}
+          </p>
+
+          <p>
+            Your invoice PDF is attached with this email.
+          </p>
+
+          <p>
+            Regards,<br>
+            Virtual Mart
+          </p>
+
+        </div>
+      `,
+
+      attachments: [
+        {
+          filename: `invoice-${order.orderNumber}.pdf`,
+          path: invoiceFilePath,
+          contentType: "application/pdf",
+        },
+      ],
+    };
+
+    await transporter.sendMail(mailOptions);
+
+  } catch (error) {
+    console.log("========== INVOICE EMAIL ERROR ==========");
+    console.log(error);
+    console.log("=========================================");
+
+    throw error;
+  }
+}; 
 
 
 module.exports = {
   sendOTPEmail,
+   sendInvoiceEmail,
 };

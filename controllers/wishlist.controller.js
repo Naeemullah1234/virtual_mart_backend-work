@@ -108,58 +108,124 @@ res.status(200).json({ success: true,message: "Product removed from wishlist suc
 
 const moveWishlistToCart = async (req, res) => {
   try {
+    const { productId, variantId } = req.body;
 
-const { productId } = req.params;
+    if (!productId || !variantId) {
+      return res.status(400).json({
+        success: false,
+        message: "Product ID and Variant ID are required.",
+      });
+    }
 
-if (!productId) {
-  return res.status(400).json({ success: false, message: "Product ID is required.", });}
+    const wishlist = await Wishlist.findOne({
+      customer: req.user._id,
+    });
 
-const wishlist = await Wishlist.findOne({
-  customer: req.user._id,
-});
+    if (!wishlist) {
+      return res.status(404).json({
+        success: false,
+        message: "Wishlist not found.",
+      });
+    }
 
-if (!wishlist) {
-  return res.status(404).json({ success: false, message: "Wishlist not found.",});}
+    const existsInWishlist = wishlist.products.some(
+      (item) => item.toString() === productId
+    );
 
-const existsInWishlist = wishlist.products.some( (item) => item.toString() === productId);
+    if (!existsInWishlist) {
+      return res.status(404).json({
+        success: false,
+        message: "Product not found in wishlist.",
+      });
+    }
 
-if (!existsInWishlist) {
-  return res.status(404).json({ success: false, message: "Product not found in wishlist.",});}
+    const product = await Product.findOne({
+      _id: productId,
+      isActive: true,
+      isDeleted: false,
+    });
 
-const product = await Product.findOne({ _id: productId, isActive: true,isDeleted: false,});
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        message: "Product not found.",
+      });
+    }
 
-if (!product) {
-  return res.status(404).json({ success: false, message: "Product not found.", });}
+    const ProductVariant = require("../models/productVariant.model");
 
-let cart = await Cart.findOne({ customer: req.user._id,});
+    const variant = await ProductVariant.findOne({
+      _id: variantId,
+      product: productId,
+    });
 
-if (!cart) {
+    if (!variant) {
+      return res.status(404).json({
+        success: false,
+        message: "Product variant not found or does not belong to this product.",
+      });
+    }
 
-  cart = await Cart.create({ customer: req.user._id, items: [], });}
+    if (variant.stock < 1) {
+      return res.status(400).json({
+        success: false,
+        message: "Product variant is out of stock.",
+      });
+    }
 
+    let cart = await Cart.findOne({
+      customer: req.user._id,
+    });
 
-const existingItem = cart.items.find( (item) => item.product.toString() === productId );
+    if (!cart) {
+      cart = await Cart.create({
+        customer: req.user._id,
+        items: [],
+      });
+    }
 
-if (existingItem) {
+    const existingItem = cart.items.find(
+      (item) =>
+        item.product.toString() === productId &&
+        item.variant.toString() === variantId
+    );
 
-  existingItem.quantity += 1;
+    if (existingItem) {
+      if (existingItem.quantity + 1 > variant.stock) {
+        return res.status(400).json({
+          success: false,
+          message: `Only ${variant.stock} item(s) available in stock.`,
+        });
+      }
 
-} else {
+      existingItem.quantity += 1;
+    } else {
+      cart.items.push({
+        product: product._id,
+        variant: variant._id,
+        quantity: 1,
+      });
+    }
 
-  cart.items.push({ product: product._id, quantity: 1,});}
+    wishlist.products = wishlist.products.filter(
+      (item) => item.toString() !== productId
+    );
 
-wishlist.products = wishlist.products.filter( (item) => item.toString() !== productId);
+    await cart.save();
+    await wishlist.save();
 
-await cart.save();
-
-await wishlist.save();
-
-res.status(200).json({ success: true,message: "Product moved to cart successfully.",});
-
+    return res.status(200).json({
+      success: true,
+      message: "Product moved to cart successfully.",
+    });
   } catch (error) {
-
     console.log(error);
 
-    res.status(500).json({ success: false, message: "Server Error",});}};
+    return res.status(500).json({
+      success: false,
+      message: "Server Error",
+    });
+  }
+};
 
 module.exports = { addToWishlist,getWishlist,removeFromWishlist, moveWishlistToCart,};

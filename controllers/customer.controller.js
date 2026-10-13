@@ -196,17 +196,17 @@ const registerCustomer = async (req, res) => {
         otp
       );
 
-    } catch (emailError) {
+         } catch (emailError) {
 
-      console.log(
-        "CUSTOMER OTP EMAIL ERROR:",
-        emailError
-      );
+  console.log(
+    "CUSTOMER OTP EMAIL ERROR:",
+    emailError
+  );
 
-      // Remove temporary registration
-  
+  // Remove temporary registration
+  deletePendingRegistration(normalizedEmail);
 
-      return res.status(500).json({
+  return res.status(500).json({
         success: false,
         message: "OTP email could not be sent.",
       });

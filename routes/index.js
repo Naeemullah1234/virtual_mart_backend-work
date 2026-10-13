@@ -16,5 +16,6 @@ router.use("/upload", uploadRoutes);
 router.use("/cart", require("./cart.routes"));
 router.use("/wishlist", require("./wishlist.routes"));
 router.use("/product-variants", require("./productVariant.routes"));
+router.use("/orders", require("./order.routes"));
 
 module.exports = router;
