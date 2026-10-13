@@ -349,6 +349,89 @@ return res.status(201).json({
   }
 };
 
+
+
+const cancelMyOrder = async (req, res) => {
+  const session = await mongoose.startSession();
+
+  try {
+    const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid order ID.",
+      });
+    }
+
+    session.startTransaction();
+
+    const order = await Order.findOne({
+      _id: id,
+      customer: req.user._id,
+    }).session(session);
+
+    if (!order) {
+      await session.abortTransaction();
+      return res.status(404).json({
+        success: false,
+        message: "Order not found.",
+      });
+    }
+
+    if (order.orderStatus !== "pending") {
+      await session.abortTransaction();
+      return res.status(400).json({
+        success: false,
+        message: "Only pending orders can be cancelled.",
+      });
+    }
+
+    for (const item of order.items) {
+      const variant = await ProductVariant.findOneAndUpdate(
+        {
+          _id: item.variant,
+          product: item.product,
+        },
+        {
+          $inc: { stock: item.quantity },
+        },
+        { new: true, session }
+      );
+
+      if (!variant) {
+        throw new Error(
+          `Product variant not found for ${item.productName}.`
+        );
+      }
+    }
+
+    order.orderStatus = "cancelled";
+    await order.save({ session });
+
+    await session.commitTransaction();
+
+    return res.status(200).json({
+      success: true,
+      message: "Order cancelled successfully.",
+      order,
+    });
+  } catch (error) {
+    if (session.inTransaction()) {
+      await session.abortTransaction();
+    }
+
+    console.log("CANCEL ORDER ERROR:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Unable to cancel order.",
+    });
+  } finally {
+    await session.endSession();
+  }
+};
+
 // ========================================
 // Get Customer Orders
 // ========================================
@@ -418,8 +501,59 @@ const getMyOrderById = async (req, res) => {
 };
 
 
+const downloadMyInvoice = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid order ID.",
+      });
+    }
+
+    const order = await Order.findOne({
+      _id: id,
+      customer: req.user._id,
+    });
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: "Order not found.",
+      });
+    }
+
+    const fileName = `invoice-${order.orderNumber}.pdf`;
+    const filePath = path.join(
+      __dirname,
+      "../uploads/invoices",
+      fileName
+    );
+
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({
+        success: false,
+        message: "Invoice PDF not found.",
+      });
+    }
+
+    return res.download(filePath, fileName);
+  } catch (error) {
+    console.log("DOWNLOAD INVOICE ERROR:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Unable to download invoice.",
+    });
+  }
+};
+
+
 module.exports = {
   createOrder,
    getMyOrders,
     getMyOrderById,
+    cancelMyOrder,
+    downloadMyInvoice
 };
