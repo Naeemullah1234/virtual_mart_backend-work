@@ -220,7 +220,40 @@ const orderSchema = new mongoose.Schema(
       ],
       default: "pending",
     },
+
+    statusHistory: [
+  {
+    status: {
+      type: String,
+      enum: [
+        "pending",
+        "confirmed",
+        "processing",
+        "shipped",
+        "delivered",
+        "cancelled",
+      ],
+      required: true,
+    },
+    changedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Admin",
+      default: null,
+    },
+    changedByRole: {
+  type: String,
+  enum: ["admin", "customer", "system"],
+  default: "system",
+},
+    changedAt: {
+      type: Date,
+      default: Date.now,
+    },
   },
+],
+  },
+
+  
   {
     timestamps: true,
   }

@@ -285,6 +285,15 @@ if (address.country.toLowerCase() !== "pakistan") {
               : "pending",
 
           orderStatus: "pending",
+
+              statusHistory: [
+            {
+              status: "pending",
+              changedBy: null,
+              changedByRole: "system",
+                changedAt: new Date(),
+              },
+         ],
         },
       ],
       { session }
@@ -407,6 +416,16 @@ const cancelMyOrder = async (req, res) => {
     }
 
     order.orderStatus = "cancelled";
+        if (!Array.isArray(order.statusHistory)) {
+  order.statusHistory = [];
+}
+
+order.statusHistory.push({
+  status: "cancelled",
+  changedBy: null,
+  changedByRole: "customer",
+  changedAt: new Date(),
+});
     await order.save({ session });
 
     await session.commitTransaction();
@@ -549,11 +568,200 @@ const downloadMyInvoice = async (req, res) => {
   }
 };
 
+const getAllOrders = async (req, res) => {
+  try {
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(
+      100,
+      Math.max(1, parseInt(req.query.limit, 10) || 10)
+    );
+
+    const filter = {};
+
+    if (req.query.status) {
+      const allowedStatuses = [
+        "pending",
+        "confirmed",
+        "processing",
+        "shipped",
+        "delivered",
+        "cancelled",
+      ];
+
+      if (!allowedStatuses.includes(req.query.status)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid order status.",
+        });
+      }
+
+      filter.orderStatus = req.query.status;
+    }
+
+    const [orders, total] = await Promise.all([
+      Order.find(filter)
+        .populate("customer", "name email")
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit),
+      Order.countDocuments(filter),
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      count: orders.length,
+      total,
+      page,
+      totalPages: Math.ceil(total / limit),
+      orders,
+    });
+  } catch (error) {
+    console.error("GET ALL ORDERS ERROR:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Unable to fetch orders.",
+    });
+  }
+};
+
+const updateOrderStatus = async (req, res) => {
+  const session = await mongoose.startSession();
+
+  try {
+    const { id } = req.params;
+    const { orderStatus } = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid order ID.",
+      });
+    }
+
+    const allowedStatuses = [
+      "pending",
+      "confirmed",
+      "processing",
+      "shipped",
+      "delivered",
+      "cancelled",
+    ];
+
+    if (!allowedStatuses.includes(orderStatus)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid order status.",
+      });
+    }
+
+    session.startTransaction();
+
+    const order = await Order.findById(id).session(session);
+
+    if (!order) {
+      await session.abortTransaction();
+
+      return res.status(404).json({
+        success: false,
+        message: "Order not found.",
+      });
+    }
+
+    if (order.orderStatus === "cancelled") {
+      await session.abortTransaction();
+
+      return res.status(400).json({
+        success: false,
+        message: "Cancelled orders cannot be updated.",
+      });
+    }
+
+    if (order.orderStatus === "delivered") {
+      await session.abortTransaction();
+
+      return res.status(400).json({
+        success: false,
+        message: "Delivered orders cannot be updated.",
+      });
+    }
+
+    if (orderStatus === "cancelled") {
+      if (order.orderStatus !== "pending") {
+        await session.abortTransaction();
+
+        return res.status(400).json({
+          success: false,
+          message: "Only pending orders can be cancelled.",
+        });
+      }
+
+      for (const item of order.items) {
+        const variant = await ProductVariant.findOneAndUpdate(
+          {
+            _id: item.variant,
+            product: item.product,
+          },
+          {
+            $inc: { stock: item.quantity },
+          },
+          {
+            new: true,
+            session,
+          }
+        );
+
+        if (!variant) {
+          throw new Error(
+            `Product variant not found for ${item.productName}.`
+          );
+        }
+      }
+    }
+
+    order.orderStatus = orderStatus;
+
+    if (!Array.isArray(order.statusHistory)) {
+  order.statusHistory = [];
+}
+
+order.statusHistory.push({
+  status: orderStatus,
+  changedBy: req.user._id,
+  changedByRole: "admin",
+  changedAt: new Date(),
+});
+    await order.save({ session });
+
+    await session.commitTransaction();
+
+    return res.status(200).json({
+      success: true,
+      message: "Order status updated successfully.",
+      order,
+    });
+  } catch (error) {
+    if (session.inTransaction()) {
+      await session.abortTransaction();
+    }
+
+    console.error("UPDATE ORDER STATUS ERROR:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Unable to update order status.",
+    });
+  } finally {
+    await session.endSession();
+  }
+};
 
 module.exports = {
   createOrder,
    getMyOrders,
     getMyOrderById,
     cancelMyOrder,
-    downloadMyInvoice
+    downloadMyInvoice,
+    getAllOrders,
+    updateOrderStatus
 };

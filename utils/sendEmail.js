@@ -15,7 +15,7 @@ const transporter = nodemailer.createTransport({
 const sendOTPEmail = async (email, otp) => {
   try {
     const mailOptions = {
-      from: `"Virtual Mart" <${process.env.EMAIL_USER}>`,
+      from: `"Check Mart" <${process.env.EMAIL_USER}>`,
       to: email,
 
       subject: "CHECK MART Email Verification OTP",
@@ -61,20 +61,20 @@ const sendOTPEmail = async (email, otp) => {
   const sendInvoiceEmail = async (email, order, invoiceFilePath) => {
   try {
     const mailOptions = {
-      from: `"Virtual Mart" <${process.env.EMAIL_USER}>`,
+      from: `"Check Mart" <${process.env.EMAIL_USER}>`,
       to: email,
 
-      subject: `Virtual Mart Invoice - ${order.orderNumber}`,
+      subject: `Check Mart Invoice - ${order.orderNumber}`,
 
       html: `
         <div style="font-family: Arial, sans-serif; color: #333;">
 
-          <h2>Virtual Mart</h2>
+          <h2>Check Mart</h2>
 
           <p>Dear ${order.shippingAddress.fullName},</p>
 
           <p>
-            Thank you for shopping with Virtual Mart.
+            Thank you for shopping with Check Mart.
           </p>
 
           <p>
@@ -97,7 +97,7 @@ const sendOTPEmail = async (email, otp) => {
 
           <p>
             Regards,<br>
-            Virtual Mart
+            Check Mart
           </p>
 
         </div>
