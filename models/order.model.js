@@ -178,6 +178,13 @@ const orderSchema = new mongoose.Schema(
       min: 0,
     },
 
+    couponCode: {
+  type: String,
+  default: null,
+  trim: true,
+  uppercase: true,
+},
+
     shipping: {
       type: Number,
       default: 0,

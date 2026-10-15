@@ -17,5 +17,6 @@ router.use("/cart", require("./cart.routes"));
 router.use("/wishlist", require("./wishlist.routes"));
 router.use("/product-variants", require("./productVariant.routes"));
 router.use("/orders", require("./order.routes"));
+router.use("/coupons", require("./coupon.routes"));
 
 module.exports = router;

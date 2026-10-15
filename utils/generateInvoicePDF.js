@@ -301,6 +301,11 @@ const generateInvoicePDF = (order, customer) =>
       let rowY = tableTop + headerHeight;
       const items = order.items || [];
 
+      const totalQty = items.reduce(
+  (total, item) => total + Number(item.quantity || 0),
+  0
+);
+
       items.forEach((item, index) => {
         const attributes = Array.isArray(item.attributes)
           ? item.attributes
@@ -392,11 +397,11 @@ const generateInvoicePDF = (order, customer) =>
         rowY += rowHeight;
       });
 
-      // TOTALS
-      rowY += 9;
+// TOTALS
+rowY += 9;
 
       const summaryWidth = 225;
-      const summaryHeight = 78;
+const summaryHeight = order.discount > 0 ? 98 : 78;
       const summaryX = right - summaryWidth;
       const summaryTop = rowY;
 
@@ -407,28 +412,36 @@ const generateInvoicePDF = (order, customer) =>
         .strokeColor(border)
         .fillAndStroke();
 
-      let totalY = summaryTop + 11;
+        let totalY = summaryTop + 11;
 
-      [
-        ["Subtotal", money(order.subtotal)],
-        ["Shipping Charges", money(order.shipping)],
-      ].forEach(([label, value]) => {
+[
+  ["Total Quantity", totalQty],
+  ["Subtotal", money(order.subtotal)],
+  ...(Number(order.discount) > 0
+    ? [["Coupon Discount", `-${money(order.discount)}`]]
+    : []),
+  ["Shipping Charges", money(order.shipping)],
+].forEach(([label, value]) => {
+
+ 
         doc
           .font("Helvetica")
           .fontSize(7.8)
           .fillColor(dark)
           .text(label, summaryX + 10, totalY, { width: 115 });
 
-        doc
-          .font("Helvetica-Bold")
-          .fontSize(7.8)
-          .fillColor(dark)
-          .text(value, summaryX + 120, totalY, {
-            width: summaryWidth - 130,
-            align: "right",
-          });
+        
+doc
+  .font("Helvetica-Bold")
+  .fontSize(7.8)
+  .fillColor(label === "Coupon Discount" ? "#c00000" : dark)
+  .text(value, summaryX + 120, totalY, {
+    width: summaryWidth - 130,
+    align: "right",
+  });
 
-        totalY += 19;
+
+        totalY += 17;
       });
 
       doc

@@ -10,6 +10,7 @@ const { sendInvoiceEmail } = require("../utils/sendEmail");
 const Customer = require("../models/customer.model");
 const fs = require("fs");
 const path = require("path");
+const Coupon = require("../models/coupon.model");
 
 
 // ========================================
@@ -37,7 +38,7 @@ const createOrder = async (req, res) => {
   const session = await mongoose.startSession();
 
   try {
-    const { addressId, paymentMethod } = req.body;
+    const { addressId, paymentMethod, couponCode} = req.body;
 
     // ----------------------------------------
     // Validate Request
@@ -194,9 +195,53 @@ const createOrder = async (req, res) => {
     // Shipping / Tax / Discount
     // ----------------------------------------
 
-    const discount = 0;
-    
-    let shipping = 0;
+      let discount = 0;
+let appliedCouponCode = null;
+
+if (couponCode) {
+  const coupon = await Coupon.findOne({
+    code: couponCode.trim().toUpperCase(),
+    isActive: true,
+  }).session(session);
+
+  if (!coupon) {
+    throw new Error("Invalid coupon code.");
+  }
+
+  const now = new Date();
+
+  if (now < coupon.startDate || now > coupon.expiryDate) {
+    throw new Error("Coupon is not currently valid.");
+  }
+
+  if (
+    coupon.usageLimit !== null &&
+    coupon.usedCount >= coupon.usageLimit
+  ) {
+    throw new Error("Coupon usage limit has been reached.");
+  }
+
+  if (subtotal < coupon.minOrderAmount) {
+    throw new Error(
+      `Minimum order amount for this coupon is Rs. ${coupon.minOrderAmount}.`
+    );
+  }
+
+  if (coupon.discountType === "percentage") {
+    discount = (subtotal * coupon.discountValue) / 100;
+
+    if (coupon.maxDiscount !== null) {
+      discount = Math.min(discount, coupon.maxDiscount);
+    }
+  } else {
+    discount = coupon.discountValue;
+  }
+
+  discount = Math.min(discount, subtotal);
+  appliedCouponCode = coupon.code;
+}
+
+let shipping = 0;
 
 if (address.country.toLowerCase() !== "pakistan") {
   // International
@@ -213,6 +258,38 @@ if (address.country.toLowerCase() !== "pakistan") {
 
     const grandTotal =
       subtotal - discount + shipping + tax;
+
+
+
+      // ----------------------------------------
+// Reserve Coupon Usage
+// ----------------------------------------
+
+if (appliedCouponCode) {
+  const updatedCoupon = await Coupon.findOneAndUpdate(
+    {
+      code: appliedCouponCode,
+      isActive: true,
+      $or: [
+        { usageLimit: null },
+        { $expr: { $lt: ["$usedCount", "$usageLimit"] } },
+      ],
+    },
+    {
+      $inc: { usedCount: 1 },
+    },
+    {
+      new: true,
+      session,
+    }
+  );
+
+  if (!updatedCoupon) {
+    throw new Error(
+      "Coupon usage limit reached. Please try another coupon."
+    );
+  }
+}
 
     // ----------------------------------------
     // Reduce Stock
@@ -273,6 +350,7 @@ if (address.country.toLowerCase() !== "pakistan") {
 
           subtotal,
           discount,
+          couponCode: appliedCouponCode,
           shipping,
           tax,
           grandTotal,
