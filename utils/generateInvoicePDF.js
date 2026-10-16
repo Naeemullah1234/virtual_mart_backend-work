@@ -142,7 +142,7 @@ const generateInvoicePDF = (order, customer) =>
       const customerDetails = [
         ["Name", address.fullName],
         ["E-mail", address.email || customer?.email || ""],
-        ["Ph", address.phone],
+        ["MOB", address.phone],
       ];
 
       customerDetails.forEach(([label, value]) => {
@@ -471,7 +471,7 @@ const stampWidth = 145;
 const stampHeight = 100;
 
 const stampX = left + 10;
-const stampY = summaryTop + (summaryHeight - stampHeight) / 2 + 6;
+const stampY = summaryTop + (summaryHeight - stampHeight) / 2 + 4;
 
 if (fs.existsSync(stampPath)) {
 doc.image(stampPath, stampX, stampY, {

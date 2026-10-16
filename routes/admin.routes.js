@@ -6,6 +6,7 @@ const { adminProtect } = require("../middleware/adminAuth.middleware");
 const { createAdmin,verifyAdminOTP,resendAdminOTP,loginAdmin,refreshAdminToken,getAdminProfile,
     logoutAdmin,forgotAdminPassword,verifyForgotPasswordOTP,resetAdminPassword,
     resendForgotPasswordOTP,getCurrentAdmin,changeAdminPassword} = require("../controllers/admin.controller");
+  const {getDashboardOverview,} = require("../controllers/dashboard.controller");
 
 
 router.post("/", createAdmin);
@@ -33,5 +34,7 @@ router.post("/resend-forgot-password-otp",resendForgotPasswordOTP);
 router.get("/me",adminProtect,getCurrentAdmin);
 
 router.put( "/change-password",adminProtect,changeAdminPassword);
+
+router.get("/dashboard", adminProtect, getDashboardOverview);
 
 module.exports = router;
