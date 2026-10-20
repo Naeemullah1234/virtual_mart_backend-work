@@ -6,7 +6,8 @@ const { adminProtect } = require("../middleware/adminAuth.middleware");
 const { createAdmin,verifyAdminOTP,resendAdminOTP,loginAdmin,refreshAdminToken,getAdminProfile,
     logoutAdmin,forgotAdminPassword,verifyForgotPasswordOTP,resetAdminPassword,
     resendForgotPasswordOTP,getCurrentAdmin,changeAdminPassword} = require("../controllers/admin.controller");
-  const {getDashboardOverview,} = require("../controllers/dashboard.controller");
+  const {getDashboardOverview,getSalesReport,getPendingOrders,getCancelledOrders,
+    getLowStockProducts,getTopSellingProducts,getOrderStatusReport} = require("../controllers/dashboard.controller");
 
 
 router.post("/", createAdmin);
@@ -36,5 +37,17 @@ router.get("/me",adminProtect,getCurrentAdmin);
 router.put( "/change-password",adminProtect,changeAdminPassword);
 
 router.get("/dashboard", adminProtect, getDashboardOverview);
+
+router.get("/sales-report", adminProtect, getSalesReport);
+
+router.get("/pending-orders", adminProtect, getPendingOrders);
+
+router.get("/cancelled-orders", adminProtect, getCancelledOrders);
+
+router.get("/low-stock", adminProtect, getLowStockProducts);
+
+router.get("/top-selling-products",adminProtect,getTopSellingProducts);
+
+router.get("/order-status-report",adminProtect,getOrderStatusReport);
 
 module.exports = router;

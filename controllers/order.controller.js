@@ -656,6 +656,91 @@ const getAllOrders = async (req, res) => {
 
     const filter = {};
 
+    
+const allowedPaymentStatuses = [
+  "pending",
+  "paid",
+  "failed",
+  "refunded",
+];
+
+if (req.query.paymentStatus) {
+  if (!allowedPaymentStatuses.includes(req.query.paymentStatus)) {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid payment status.",
+    });
+  }
+
+  filter.paymentStatus = req.query.paymentStatus;
+}
+
+const allowedPaymentMethods = ["cod", "online"];
+
+if (req.query.paymentMethod) {
+  if (!allowedPaymentMethods.includes(req.query.paymentMethod)) {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid payment method.",
+    });
+  }
+
+  filter.paymentMethod = req.query.paymentMethod;
+}
+
+
+    
+if (req.query.startDate || req.query.endDate) {
+  filter.createdAt = {};
+
+  if (req.query.startDate) {
+    const start = new Date(`${req.query.startDate}T00:00:00`);
+
+    if (Number.isNaN(start.getTime())) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid startDate.",
+      });
+    }
+
+    filter.createdAt.$gte = start;
+  }
+
+  if (req.query.endDate) {
+    const end = new Date(`${req.query.endDate}T23:59:59.999`);
+
+    if (Number.isNaN(end.getTime())) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid endDate.",
+      });
+    }
+
+    filter.createdAt.$lte = end;
+  }
+
+  if (
+    filter.createdAt.$gte &&
+    filter.createdAt.$lte &&
+    filter.createdAt.$gte > filter.createdAt.$lte
+  ) {
+    return res.status(400).json({
+      success: false,
+      message: "startDate must be before endDate.",
+    });
+  }
+}
+
+
+if (req.query.orderNumber) {
+  filter.orderNumber = {
+    $regex: req.query.orderNumber.trim(),
+    $options: "i",
+  };
+}
+
+
+
     if (req.query.status) {
       const allowedStatuses = [
         "pending",
@@ -676,10 +761,49 @@ const getAllOrders = async (req, res) => {
       filter.orderStatus = req.query.status;
     }
 
+    
+if (req.query.customer) {
+  const search = req.query.customer.trim();
+
+  const customers = await Customer.find({
+    $or: [
+      { name: { $regex: search, $options: "i" } },
+      { email: { $regex: search, $options: "i" } },
+    ],
+  }).select("_id");
+
+  filter.customer = {
+    $in: customers.map((customer) => customer._id),
+  };
+}
+
+
+    const allowedSortOptions = {
+      newest: { createdAt: -1 },
+      oldest: { createdAt: 1 },
+      highestAmount: { grandTotal: -1 },
+      lowestAmount: { grandTotal: 1 },
+      orderNumberAsc: { orderNumber: 1 },
+      orderNumberDesc: { orderNumber: -1 },
+    };
+
+    const sortBy = req.query.sortBy || "newest";
+
+    if (!Object.prototype.hasOwnProperty.call(allowedSortOptions, sortBy)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid sort option.",
+      });
+    }
+
+    const sortOption = allowedSortOptions[sortBy];
+
+
+
     const [orders, total] = await Promise.all([
       Order.find(filter)
         .populate("customer", "name email")
-        .sort({ createdAt: -1 })
+        .sort(sortOption)
         .skip((page - 1) * limit)
         .limit(limit),
       Order.countDocuments(filter),
