@@ -258,6 +258,50 @@ const orderSchema = new mongoose.Schema(
     },
   },
 ],
+
+
+    statusNotifications: [
+      {
+        status: {
+          type: String,
+          enum: [
+            "pending",
+            "confirmed",
+            "processing",
+            "shipped",
+            "delivered",
+            "cancelled",
+          ],
+          required: true,
+        },
+        email: {
+          type: String,
+          trim: true,
+          lowercase: true,
+        },
+        sent: {
+          type: Boolean,
+          default: false,
+        },
+        attempts: {
+          type: Number,
+          default: 0,
+        },
+        lastError: {
+          type: String,
+          default: "",
+        },
+        lastAttemptAt: {
+          type: Date,
+          default: null,
+        },
+        sentAt: {
+          type: Date,
+          default: null,
+        },
+      },
+    ],
+
   },
 
   

@@ -6,7 +6,7 @@ const Address = require("../models/address.model");
 const Product = require("../models/product.model");
 const ProductVariant = require("../models/productVariant.model");
 const { generateInvoicePDF } = require("../utils/generateInvoicePDF");
-const { sendInvoiceEmail } = require("../utils/sendEmail");
+const { sendInvoiceEmail,sendOrderStatusEmail} = require("../utils/sendEmail");
 const Customer = require("../models/customer.model");
 const fs = require("fs");
 const path = require("path");
@@ -870,6 +870,15 @@ const updateOrderStatus = async (req, res) => {
       });
     }
 
+    if (order.orderStatus === orderStatus) {
+  await session.abortTransaction();
+
+  return res.status(400).json({
+    success: false,
+    message: "Order already has this status.",
+  });
+}
+
     if (order.orderStatus === "cancelled") {
       await session.abortTransaction();
 
@@ -933,15 +942,66 @@ order.statusHistory.push({
   changedByRole: "admin",
   changedAt: new Date(),
 });
-    await order.save({ session });
+    
+await order.save({ session });
 
-    await session.commitTransaction();
+await session.commitTransaction();
 
-    return res.status(200).json({
-      success: true,
-      message: "Order status updated successfully.",
+const customer = await Customer.findById(order.customer).select("email");
+
+let statusEmailSent = false;
+
+const notification = {
+  status: order.orderStatus,
+  email: customer?.email || order.shippingAddress?.email || "",
+  sent: false,
+  attempts: 0,
+  lastError: "",
+  lastAttemptAt: new Date(),
+  sentAt: null,
+};
+
+if (notification.email) {
+  notification.attempts = 1;
+
+  try {
+    await sendOrderStatusEmail(
+      notification.email,
       order,
-    });
+      order.orderStatus
+    );
+
+    notification.sent = true;
+    notification.sentAt = new Date();
+    statusEmailSent = true;
+  } catch (emailError) {
+    notification.lastError =
+      emailError.message || "Email sending failed.";
+
+    console.error("ORDER STATUS EMAIL ERROR:", emailError);
+  }
+} else {
+  notification.lastError = "Customer email not found.";
+}
+
+order.statusNotifications.push(notification);
+
+try {
+  await order.save();
+} catch (trackingError) {
+  console.error(
+    "NOTIFICATION TRACKING ERROR:",
+    trackingError
+  );
+}
+
+return res.status(200).json({
+  success: true,
+  message: "Order status updated successfully.",
+  statusEmailSent,
+  order,
+});
+
   } catch (error) {
     if (session.inTransaction()) {
       await session.abortTransaction();

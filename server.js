@@ -10,6 +10,7 @@ const cron = require("node-cron");
 const cleanupOrphanImages = require("./utils/cleanupOrphanImages");
 const routes = require("./routes");
 const adminRoutes = require("./routes/admin.routes");
+const {startOrderNotificationRetry,} = require("./services/orderNotification.service");
 
 
 connectDB();
@@ -59,6 +60,8 @@ cron.schedule(
 
 
 const PORT = process.env.PORT || 5000;
+
+// startOrderNotificationRetry();
 
 app.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);

@@ -124,7 +124,63 @@ const sendOTPEmail = async (email, otp) => {
 }; 
 
 
+
+const sendOrderStatusEmail = async (email, order, status) => {
+  try {
+    const statusMessages = {
+      confirmed: "Your order has been confirmed.",
+      processing: "Your order is now being prepared.",
+      shipped: "Your order has been shipped.",
+      delivered: "Your order has been delivered.",
+      cancelled: "Your order has been cancelled.",
+      pending: "Your order is pending.",
+    };
+
+    const mailOptions = {
+      from: `"Check Mart" <${process.env.EMAIL_USER}>`,
+      to: email,
+      subject: `Check Mart Order Update - ${order.orderNumber}`,
+     
+html: `
+  <div style="font-family: Arial, sans-serif; color: #333; line-height: 1.6;">
+    <h2>Check Mart</h2>
+
+    <p>Dear ${order.shippingAddress.fullName},</p>
+
+    <p>
+      <strong>Your Order Number:</strong>
+      ${order.orderNumber}
+    </p>
+
+    <p>
+      Is <strong>${status.toUpperCase()}</strong>
+    </p>
+
+    <p>
+      <strong>Your Order Amount Is:</strong>
+      Rs. ${Number(order.grandTotal).toFixed(2)}
+    </p>
+
+    <p>
+      Regards,<br>
+      Check Mart
+    </p>
+  </div>
+`,
+
+    };
+
+    await transporter.sendMail(mailOptions);
+  } catch (error) {
+    console.log("ORDER STATUS EMAIL ERROR:", error);
+    throw error;
+  }
+};
+
+
+
 module.exports = {
   sendOTPEmail,
    sendInvoiceEmail,
+   sendOrderStatusEmail
 };
