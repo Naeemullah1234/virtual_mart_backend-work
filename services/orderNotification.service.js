@@ -13,6 +13,45 @@ const retryFailedOrderNotifications = async () => {
     for (let i = 0; i < RETRY_BATCH_SIZE; i++) {
       const now = new Date();
 
+      console.log("Current time:", now);
+
+      const testRecord = await OrderNotification.findOne({
+  sent: false,
+  attempts: 0,
+});
+
+console.log(
+  "Test notification:",
+  testRecord
+    ? {
+        id: testRecord._id,
+        sent: testRecord.sent,
+        attempts: testRecord.attempts,
+        nextRetryAt: testRecord.nextRetryAt,
+        lockedUntil: testRecord.lockedUntil,
+      }
+    : "Not found"
+);
+
+const eligibleCount = await OrderNotification.countDocuments({
+  sent: false,
+  attempts: { $lt: MAX_ATTEMPTS },
+  nextRetryAt: { $lte: now },
+  $or: [
+    { lockedUntil: null },
+    { lockedUntil: { $exists: false } },
+    { lockedUntil: { $lte: now } },
+  ],
+});
+
+console.log("Eligible notifications:", eligibleCount);
+
+const debugNotifications = await OrderNotification.find({
+  sent: false,
+}).select("sent attempts nextRetryAt lockedUntil");
+
+console.log("Pending notification records:", debugNotifications);
+
       // Atomically claim one eligible notification.
       const notification = await OrderNotification.findOneAndUpdate(
         {
@@ -35,30 +74,50 @@ const retryFailedOrderNotifications = async () => {
           $inc: { attempts: 1 },
         },
         {
-          new: true,
-          sort: { nextRetryAt: 1 },
-        }
+  returnDocument: "after",
+  sort: { nextRetryAt: 1 },
+}
       );
 
-      if (!notification) break;
+     if (!notification) {
+  console.log("No eligible notifications found for retry.");
+  break;
+}
+
+console.log("Retrying notification:", notification._id);
+console.log("Attempt number:", notification.attempts);
 
       try {
-        const order = await Order.findById(notification.order);
+        const orderId =
+  notification.order?._id || notification.order;
+
+  console.log("Notification order value:", notification.order);
+console.log("Notification order type:", typeof notification.order);
+console.log(
+  "Notification order ID:",
+  notification.order?._id || notification.order
+);
+
+const order = await Order.findById(orderId);
 
         if (!order) {
           throw new Error("Related order not found.");
         }
 
-        const notificationOrder = {
-          ...order.toObject(),
-          orderStatus: notification.status,
-        };
+       const notificationOrder = {
+  orderNumber: order.orderNumber,
+  shippingAddress: {
+    fullName: order.shippingAddress?.fullName || "Customer",
+  },
+  grandTotal: order.grandTotal,
+  orderStatus: notification.status,
+};
 
-        await sendOrderStatusEmail(
-          notification.email,
-          notificationOrder,
-          notification.status
-        );
+await sendOrderStatusEmail(
+  notification.email,
+  notificationOrder,
+  notification.status
+);
 
         await OrderNotification.updateOne(
           { _id: notification._id },

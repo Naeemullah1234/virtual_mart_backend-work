@@ -1,5 +1,4 @@
 const mongoose = require("mongoose");
-
 const Order = require("../models/order.model");
 const Cart = require("../models/cart.model");
 const Address = require("../models/address.model");
@@ -11,6 +10,7 @@ const Customer = require("../models/customer.model");
 const fs = require("fs");
 const path = require("path");
 const Coupon = require("../models/coupon.model");
+const OrderNotification = require("../models/orderNotification.model");
 
 
 // ========================================
@@ -827,8 +827,12 @@ if (req.query.customer) {
   }
 };
 
+
+
 const updateOrderStatus = async (req, res) => {
   const session = await mongoose.startSession();
+  let order;
+  let notificationId = null;
 
   try {
     const { id } = req.params;
@@ -857,166 +861,209 @@ const updateOrderStatus = async (req, res) => {
       });
     }
 
-    session.startTransaction();
+    await session.withTransaction(async () => {
+      order = await Order.findById(id).session(session);
 
-    const order = await Order.findById(id).session(session);
-
-    if (!order) {
-      await session.abortTransaction();
-
-      return res.status(404).json({
-        success: false,
-        message: "Order not found.",
-      });
-    }
-
-    if (order.orderStatus === orderStatus) {
-  await session.abortTransaction();
-
-  return res.status(400).json({
-    success: false,
-    message: "Order already has this status.",
-  });
-}
-
-    if (order.orderStatus === "cancelled") {
-      await session.abortTransaction();
-
-      return res.status(400).json({
-        success: false,
-        message: "Cancelled orders cannot be updated.",
-      });
-    }
-
-    if (order.orderStatus === "delivered") {
-      await session.abortTransaction();
-
-      return res.status(400).json({
-        success: false,
-        message: "Delivered orders cannot be updated.",
-      });
-    }
-
-    if (orderStatus === "cancelled") {
-      if (order.orderStatus !== "pending") {
-        await session.abortTransaction();
-
-        return res.status(400).json({
-          success: false,
-          message: "Only pending orders can be cancelled.",
-        });
+      if (!order) {
+        const error = new Error("Order not found.");
+        error.statusCode = 404;
+        throw error;
       }
 
-      for (const item of order.items) {
-        const variant = await ProductVariant.findOneAndUpdate(
-          {
-            _id: item.variant,
-            product: item.product,
-          },
-          {
-            $inc: { stock: item.quantity },
-          },
-          {
-            new: true,
-            session,
+      if (order.orderStatus === orderStatus) {
+        const error = new Error(
+          "Order already has this status."
+        );
+        error.statusCode = 400;
+        throw error;
+      }
+
+      if (
+        order.orderStatus === "cancelled" ||
+        order.orderStatus === "delivered"
+      ) {
+        const error = new Error(
+          "This order can no longer be updated."
+        );
+        error.statusCode = 400;
+        throw error;
+      }
+
+      if (orderStatus === "cancelled") {
+        if (order.orderStatus !== "pending") {
+          const error = new Error(
+            "Only pending orders can be cancelled."
+          );
+          error.statusCode = 400;
+          throw error;
+        }
+
+        for (const item of order.items) {
+          const variant = await ProductVariant.findOneAndUpdate(
+            {
+              _id: item.variant,
+              product: item.product,
+            },
+            {
+              $inc: { stock: item.quantity },
+            },
+            {
+              new: true,
+              session,
+            }
+          );
+
+          if (!variant) {
+            throw new Error(
+              `Product variant not found for ${item.productName}.`
+            );
           }
+        }
+      }
+
+      const customer = await Customer.findById(order.customer)
+        .select("email")
+        .session(session);
+
+      const email =
+        customer?.email || order.shippingAddress?.email || "";
+
+      order.orderStatus = orderStatus;
+
+      if (!Array.isArray(order.statusHistory)) {
+        order.statusHistory = [];
+      }
+
+      order.statusHistory.push({
+        status: orderStatus,
+        changedBy: req.user._id,
+        changedByRole: "admin",
+        changedAt: new Date(),
+      });
+
+      await order.save({ session });
+
+      if (email) {
+        const [notification] = await OrderNotification.create(
+          [
+            {
+              order: order._id,
+              status: orderStatus,
+              email,
+              sent: false,
+              attempts: 0,
+              nextRetryAt: new Date(),
+            },
+          ],
+          { session }
         );
 
-        if (!variant) {
-          throw new Error(
-            `Product variant not found for ${item.productName}.`
+        notificationId = notification._id;
+      }
+    });
+
+    // Transaction committed. Attempt email immediately.
+    let statusEmailSent = false;
+
+    if (notificationId) {
+      const now = new Date();
+
+      const notification =
+        await OrderNotification.findOneAndUpdate(
+          {
+            _id: notificationId,
+            sent: false,
+            attempts: 0,
+            nextRetryAt: { $lte: now },
+            $or: [
+              { lockedUntil: null },
+              { lockedUntil: { $exists: false } },
+              { lockedUntil: { $lte: now } },
+            ],
+          },
+          {
+            $inc: { attempts: 1 },
+            $set: {
+              lastAttemptAt: now,
+              lockedUntil: new Date(
+                now.getTime() + 10 * 60 * 1000
+              ),
+            },
+          },
+          { new: true }
+        );
+
+      if (notification) {
+        try {
+          await sendOrderStatusEmail(
+            notification.email,
+            order,
+            orderStatus
+          );
+
+          await OrderNotification.updateOne(
+            { _id: notificationId },
+            {
+              $set: {
+                sent: true,
+                sentAt: new Date(),
+                lastError: "",
+                lockedUntil: null,
+              },
+            }
+          );
+
+          statusEmailSent = true;
+        } catch (emailError) {
+          await OrderNotification.updateOne(
+            { _id: notificationId },
+            {
+              $set: {
+                lastError:
+                  emailError.message || "Email sending failed.",
+                nextRetryAt: new Date(
+                  Date.now() + 5 * 60 * 1000
+                ),
+                lockedUntil: null,
+              },
+            }
+          );
+
+          console.error(
+            "ORDER STATUS EMAIL ERROR:",
+            emailError.message
           );
         }
       }
+    } else {
+      console.error(
+        `No customer email found for order ${order.orderNumber}.`
+      );
     }
 
-    order.orderStatus = orderStatus;
-
-    if (!Array.isArray(order.statusHistory)) {
-  order.statusHistory = [];
-}
-
-order.statusHistory.push({
-  status: orderStatus,
-  changedBy: req.user._id,
-  changedByRole: "admin",
-  changedAt: new Date(),
-});
-    
-await order.save({ session });
-
-await session.commitTransaction();
-
-const customer = await Customer.findById(order.customer).select("email");
-
-let statusEmailSent = false;
-
-const notification = {
-  status: order.orderStatus,
-  email: customer?.email || order.shippingAddress?.email || "",
-  sent: false,
-  attempts: 0,
-  lastError: "",
-  lastAttemptAt: new Date(),
-  sentAt: null,
-};
-
-if (notification.email) {
-  notification.attempts = 1;
-
-  try {
-    await sendOrderStatusEmail(
-      notification.email,
+    return res.status(200).json({
+      success: true,
+      message: "Order status updated successfully.",
+      statusEmailSent,
+      notificationQueued: Boolean(notificationId),
       order,
-      order.orderStatus
-    );
-
-    notification.sent = true;
-    notification.sentAt = new Date();
-    statusEmailSent = true;
-  } catch (emailError) {
-    notification.lastError =
-      emailError.message || "Email sending failed.";
-
-    console.error("ORDER STATUS EMAIL ERROR:", emailError);
-  }
-} else {
-  notification.lastError = "Customer email not found.";
-}
-
-order.statusNotifications.push(notification);
-
-try {
-  await order.save();
-} catch (trackingError) {
-  console.error(
-    "NOTIFICATION TRACKING ERROR:",
-    trackingError
-  );
-}
-
-return res.status(200).json({
-  success: true,
-  message: "Order status updated successfully.",
-  statusEmailSent,
-  order,
-});
-
+    });
   } catch (error) {
-    if (session.inTransaction()) {
-      await session.abortTransaction();
-    }
-
     console.error("UPDATE ORDER STATUS ERROR:", error);
 
-    return res.status(500).json({
+    return res.status(error.statusCode || 500).json({
       success: false,
-      message: "Unable to update order status.",
+      message:
+        error.statusCode
+          ? error.message
+          : "Unable to update order status.",
     });
   } finally {
     await session.endSession();
   }
 };
+
+
 
 module.exports = {
   createOrder,
