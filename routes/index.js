@@ -19,6 +19,7 @@ router.use("/product-variants", require("./productVariant.routes"));
 router.use("/orders", require("./order.routes"));
 router.use("/coupons", require("./coupon.routes"));
 router.use("/reviews", require("./review.routes"));
+router.use("/comments", require("./comment.routes"));
 
 
 

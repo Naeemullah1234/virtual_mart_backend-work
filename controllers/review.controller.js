@@ -1,8 +1,8 @@
-
 const Review = require("../models/review.model");
 const Product = require("../models/product.model");
+const Order = require("../models/order.model");
 
-// Add Review
+
 const addReview = async (req, res) => {
   try {
     const { productId, rating, comment } = req.body;
@@ -17,9 +17,7 @@ const addReview = async (req, res) => {
     const numericRating = Number(rating);
 
     if (
-      !Number.isInteger(numericRating) ||
-      numericRating < 1 ||
-      numericRating > 5
+      !Number.isInteger(numericRating) || numericRating < 1 || numericRating > 5
     ) {
       return res.status(400).json({
         success: false,
@@ -43,12 +41,22 @@ const addReview = async (req, res) => {
       });
     }
 
+        const hasPurchasedProduct = await Order.exists({
+  customer: req.user._id,
+  orderStatus: "delivered",
+  "items.product": productId,
+});
+
+if (!hasPurchasedProduct) {
+  return res.status(403).json({
+    success: false,
+    message:
+      "You can review this product only after your order has been delivered.",
+  });
+}
+
     const review = await Review.create({
-      customer: req.user._id,
-      product: productId,
-      rating: numericRating,
-      comment: comment.trim(),
-    });
+      customer: req.user._id,product: productId,rating: numericRating,comment: comment.trim(),});
 
     return res.status(201).json({
       success: true,
@@ -70,12 +78,10 @@ const addReview = async (req, res) => {
   }
 };
 
-// Get My Reviews
+
 const getMyReviews = async (req, res) => {
   try {
-    const reviews = await Review.find({
-      customer: req.user._id,
-    })
+    const reviews = await Review.find({customer: req.user._id,})
       .populate("product", "name images")
       .sort({ createdAt: -1 });
 
@@ -92,15 +98,12 @@ const getMyReviews = async (req, res) => {
   }
 };
 
-// Update My Review
+
 const updateMyReview = async (req, res) => {
   try {
     const { rating, comment } = req.body;
 
-    const review = await Review.findOne({
-      _id: req.params.reviewId,
-      customer: req.user._id,
-    });
+    const review = await Review.findOne({_id: req.params.reviewId,customer: req.user._id,});
 
     if (!review) {
       return res.status(404).json({
@@ -113,9 +116,7 @@ const updateMyReview = async (req, res) => {
       const numericRating = Number(rating);
 
       if (
-        !Number.isInteger(numericRating) ||
-        numericRating < 1 ||
-        numericRating > 5
+        !Number.isInteger(numericRating) || numericRating < 1 || numericRating > 5
       ) {
         return res.status(400).json({
           success: false,
@@ -128,9 +129,7 @@ const updateMyReview = async (req, res) => {
 
     if (comment !== undefined) {
       if (
-        typeof comment !== "string" ||
-        !comment.trim() ||
-        comment.trim().length > 1000
+        typeof comment !== "string" || !comment.trim() || comment.trim().length > 1000
       ) {
         return res.status(400).json({
           success: false,
@@ -141,7 +140,7 @@ const updateMyReview = async (req, res) => {
       review.comment = comment.trim();
     }
 
-    // Edited reviews must be approved again.
+    
     review.isApproved = false;
 
     await review.save();
@@ -159,13 +158,10 @@ const updateMyReview = async (req, res) => {
   }
 };
 
-// Delete My Review
+
 const deleteMyReview = async (req, res) => {
   try {
-    const review = await Review.findOneAndDelete({
-      _id: req.params.reviewId,
-      customer: req.user._id,
-    });
+    const review = await Review.findOneAndDelete({ _id: req.params.reviewId, customer: req.user._id,});
 
     if (!review) {
       return res.status(404).json({
@@ -270,9 +266,7 @@ const getProductReviews = async (req, res) => {
 
     const totalReviews = reviews.length;
 
-    const averageRating =
-      totalReviews > 0
-        ? Number(
+    const averageRating = totalReviews > 0 ? Number(
             (
               reviews.reduce((sum, review) => sum + review.rating, 0) /
               totalReviews
@@ -297,12 +291,4 @@ const getProductReviews = async (req, res) => {
 
 
 
-module.exports = {
-  addReview,
-  getMyReviews,
-  updateMyReview,
-  deleteMyReview,
-  getAllReviewsForAdmin,
-  moderateReview,
-  getProductReviews,
-};
+module.exports = {addReview,getMyReviews,updateMyReview,deleteMyReview, getAllReviewsForAdmin, moderateReview,getProductReviews,};

@@ -19,15 +19,6 @@ const adminProtect = async (req, res, next) => {
       return res.status(401).json({ success: false, message: "Access Denied. No Token Provided.",});}
 
 
-   console.log("========== /ME TOKEN TIME ==========");
-console.log("SERVER NOW:", new Date());
-console.log("TOKEN IAT:", jwt.decode(token)?.iat);
-console.log(
-  "TOKEN EXP DATE:",
-  new Date(jwt.decode(token)?.exp * 1000)
-);
-console.log("====================================");
-
 
     const decoded = jwt.verify( token, process.env.JWT_SECRET);
 
@@ -109,6 +100,4 @@ if (decoded.tokenVersion !== admin.tokenVersion) {
   });
 }};
 
-module.exports = {
-  adminProtect,
-};
+module.exports = {adminProtect,};

@@ -28,6 +28,29 @@ const reviewSchema = new mongoose.Schema(
       trim: true,
       maxlength: 1000,
     },
+    
+    images: {
+      type: [
+        {
+          url: {
+            type: String,
+            required: true,
+          },
+          filename: {
+            type: String,
+            required: true,
+          },
+        },
+      ],
+      default: [],
+      validate: {
+       validator: function (images) {
+  return images.length <= 3;
+},
+message: "A review can contain a maximum of 3 images.",
+      },
+    },
+
 
     isApproved: {
       type: Boolean,
@@ -37,7 +60,7 @@ const reviewSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// Har customer ek product par sirf ek review de sake.
+
 reviewSchema.index(
   { customer: 1, product: 1 },
   { unique: true }

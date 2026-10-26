@@ -3,7 +3,6 @@ const router = express.Router();
 const {registerCustomer,verifyCustomerRegistrationOTP,resendCustomerRegistrationOTP,forgotCustomerPassword,verifyForgotPasswordOTP,resetCustomerPassword,
    resendForgotPasswordOTP,loginCustomer,refreshCustomerToken,
    getCustomerProfile,updateCustomerProfile,changeCustomerPassword,logoutCustomer,} = require("../controllers/customer.controller");
-const { protect } = require("../middleware/auth.middleware");
 const { customerProtect,} = require("../middleware/customerAuth.middleware");
 
 
@@ -25,12 +24,14 @@ router.post("/resend-forgot-password-otp",resendForgotPasswordOTP);
 
 router.post("/refresh-token",refreshCustomerToken);
 
-router.get("/profile", protect, getCustomerProfile);
+router.get("/profile", customerProtect, getCustomerProfile);
 
-router.put("/profile", protect, updateCustomerProfile);
+router.put("/profile", customerProtect, updateCustomerProfile);
 
-router.put("/change-password",protect,changeCustomerPassword);
+router.put("/change-password", customerProtect, changeCustomerPassword);
 
-router.post("/logout",protect,logoutCustomer);
+router.post("/logout", customerProtect, logoutCustomer);
+
+
 
 module.exports = router;

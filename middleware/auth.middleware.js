@@ -2,6 +2,7 @@ const Admin = require("../models/admin.model");
 const Customer = require("../models/customer.model");
 const jwt = require("jsonwebtoken");
 
+
 const protect = async (req, res, next) => {
   try {
     let token;
@@ -141,10 +142,7 @@ req.user = account;
 
 } catch (error) {
 
-    console.log(
-      "ACCOUNT AUTH ERROR:",
-      error
-    );
+    console.log("ACCOUNT AUTH ERROR:",error);
 
     // --------------------------------
     // Expired Token
@@ -179,13 +177,9 @@ req.user = account;
 };
 
 
+
 const authorize = (...roles) => {
   return (req, res, next) => {
-
-    if (process.env.ENABLE_ADMIN_AUTH === "false") {
-      return next();
-    }
-
     if (!req.user) {
       return res.status(401).json({
         success: false,
@@ -196,7 +190,8 @@ const authorize = (...roles) => {
     if (!roles.includes(req.user.role)) {
       return res.status(403).json({
         success: false,
-        message: "Access Denied. You are not authorized to perform this action.",
+        message:
+          "Access denied. You are not authorized to perform this action.",
       });
     }
 
@@ -205,7 +200,5 @@ const authorize = (...roles) => {
 };
 
 
-module.exports = {
-  protect,
-  authorize,
-};
+
+module.exports = {protect,authorize,};

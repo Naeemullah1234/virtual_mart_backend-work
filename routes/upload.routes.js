@@ -2,46 +2,20 @@ const express = require("express");
 const multer = require("multer");
 const router = express.Router();
 const upload = require("../middleware/upload.middleware");
-const { deleteUploadedImage,} = require("../controllers/upload.controller");
+const {MAX_PRODUCT_IMAGES,MAX_REVIEW_IMAGES,} = require("../config/upload.config");
+const {protect,authorize,} = require("../middleware/auth.middleware");
+const {customerProtect,} = require("../middleware/customerAuth.middleware");
+const {deleteUploadedImage,} = require("../controllers/upload.controller");
 
-router.post("/products", (req, res) => {
 
-  upload.array("images", MAX_PRODUCT_IMAGES)(req, res, (err) => {
-
-  
-    if (err instanceof multer.MulterError) {
-
-      switch (err.code) {
-
-        case "LIMIT_FILE_SIZE":
-          return res.status(400).json({
-            success: false,
-            message: "Each image must be less than 5MB.",
-          });
-
-        case "LIMIT_UNEXPECTED_FILE":
-          return res.status(400).json({
-            success: false,
-            message: `Maximum ${MAX_PRODUCT_IMAGES} images are allowed.`,
-          });
-
-        default:
-          return res.status(400).json({
-            success: false,
-            message: err.message,
-          });
-      }
-    }
-
-   
-    if (err) {
-      return res.status(400).json({
-        success: false,
-        message: err.message,
-      });
-    }
-
-   
+router.post("/products",protect,authorize("admin"),
+  (req, res, next) => {
+    upload.array("images", MAX_PRODUCT_IMAGES)(req, res, (err) => {
+      if (err) return handleUploadError(err, res);
+      next();
+    });
+  },
+  (req, res) => {
     if (!req.files || req.files.length === 0) {
       return res.status(400).json({
         success: false,
@@ -49,7 +23,7 @@ router.post("/products", (req, res) => {
       });
     }
 
-    const uploadedImages = req.files.map((file) => ({
+    const images = req.files.map((file) => ({
       filename: file.filename,
       originalName: file.originalname,
       url: `/uploads/products/${file.filename}`,
@@ -61,14 +35,66 @@ router.post("/products", (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: "Images uploaded successfully.",
-      images: uploadedImages,
+      message: "Product images uploaded successfully.",
+      images,
     });
+  }
+);
 
+
+router.post("/reviews",customerProtect,
+  (req, res, next) => {
+    upload.array("images", MAX_REVIEW_IMAGES)(req, res, (err) => {
+      if (err) return handleUploadError(err, res);
+      next();
+    });
+  },
+  (req, res) => {
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Please upload at least one review image.",
+      });
+    }
+
+    const images = req.files.map((file) => ({
+      filename: file.filename,
+      url: `/uploads/products/${file.filename}`,
+    }));
+
+    return res.status(200).json({
+      success: true,
+      message: "Review images uploaded successfully.",
+      images,
+    });
+  }
+);
+
+
+function handleUploadError(err, res) {
+  if (err instanceof multer.MulterError) {
+    if (err.code === "LIMIT_FILE_SIZE") {
+      return res.status(400).json({
+        success: false,
+        message: "Each image must not exceed 5 MB.",
+      });
+    }
+
+    if (err.code === "LIMIT_UNEXPECTED_FILE") {
+      return res.status(400).json({
+        success: false,
+        message: "Too many images uploaded.",
+      });
+    }
+  }
+
+  return res.status(400).json({
+    success: false,
+    message: err.message || "Image upload failed.",
   });
+}
 
-});
- 
-router.delete( "/products/:filename",deleteUploadedImage);
+
+router.delete("/products/:filename",protect,authorize("admin"),deleteUploadedImage);
 
 module.exports = router;

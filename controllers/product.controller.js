@@ -873,7 +873,7 @@ const productsWithDetails = productsWithVariants.map((product) => {
     hasPreviousPage: currentPage > 1,
   },
 
-  products: productsWithDetails,
+ products: paginatedProducts,
 });
 
   } catch (error) {
