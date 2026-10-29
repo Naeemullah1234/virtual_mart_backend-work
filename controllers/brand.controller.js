@@ -214,10 +214,4 @@ const deleteBrand = async (req, res) => {
   }
 };
 
-module.exports = {
-  createBrand,
-  getAllBrands,
-  getBrandById,
-  updateBrand,
-  deleteBrand
-};
+module.exports = {createBrand,getAllBrands,getBrandById,updateBrand,deleteBrand};

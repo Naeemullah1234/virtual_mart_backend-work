@@ -454,10 +454,4 @@ res.status(200).json({
 };
 
 
-module.exports = {
-  addToCart,
-  getCart,
-  updateCartQuantity,
-  removeCartItem,
-  clearCart
-};
+module.exports = { addToCart,getCart,updateCartQuantity,removeCartItem,clearCart};

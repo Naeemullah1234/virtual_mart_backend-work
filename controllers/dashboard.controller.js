@@ -470,12 +470,4 @@ const getOrderStatusReport = async (req, res) => {
 
 
 
-module.exports = {
-  getDashboardOverview,
-  getSalesReport,
-  getPendingOrders,
-  getCancelledOrders,
-  getLowStockProducts,
-  getTopSellingProducts,
-  getOrderStatusReport
-};
+module.exports = {getDashboardOverview,getSalesReport,getPendingOrders,getCancelledOrders,getLowStockProducts,getTopSellingProducts,getOrderStatusReport};

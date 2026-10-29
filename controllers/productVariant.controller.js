@@ -1054,12 +1054,4 @@ const getProductVariantById = async (req, res) => {
 };
 
 
-module.exports = {
-  createProductVariant,
-  getProductVariants,
-  updateProductVariant,
-  deleteProductVariant,
-  getAllProductVariants,
-  getProductVariantFilters,
-  getProductVariantById,
-};
+module.exports = {createProductVariant,getProductVariants,updateProductVariant,deleteProductVariant,getAllProductVariants,getProductVariantFilters, getProductVariantById,};

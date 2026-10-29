@@ -142,10 +142,4 @@ const getSubCategoryById = async (req, res) => {
 
     res.status(500).json({ success: false,message: "Server Error",});}};
 
-module.exports = {
-  createSubCategory,
-  getAllSubCategories,
-  getSubCategoryById,
-  updateSubCategory,
-  deleteSubCategory,
-};
+module.exports = {createSubCategory,getAllSubCategories,getSubCategoryById, updateSubCategory, deleteSubCategory,};

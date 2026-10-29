@@ -1648,21 +1648,6 @@ const logoutCustomer = async (req, res) => {
 
 
 
-module.exports = {
-  registerCustomer,
-  verifyCustomerRegistrationOTP,
-  resendCustomerRegistrationOTP,
-  forgotCustomerPassword,
-  verifyForgotPasswordOTP,
-   resetCustomerPassword,
-   resendForgotPasswordOTP,
-   loginCustomer,
-  refreshCustomerToken,
-  logoutCustomer,
-
-
-  getCustomerProfile,
-  updateCustomerProfile,
-  changeCustomerPassword,
-   
-};
+module.exports = {registerCustomer,verifyCustomerRegistrationOTP,resendCustomerRegistrationOTP,forgotCustomerPassword,
+  verifyForgotPasswordOTP,resetCustomerPassword,resendForgotPasswordOTP,loginCustomer,
+  refreshCustomerToken,logoutCustomer, getCustomerProfile,updateCustomerProfile,changeCustomerPassword,};

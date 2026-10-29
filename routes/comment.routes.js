@@ -1,12 +1,13 @@
 const express = require("express");
 const router = express.Router();
 const {protect,authorize,} = require("../middleware/auth.middleware");
+const { optionalCustomerAuth } = require("../middleware/optionalAuth.middleware");
 
 const {createComment,getProductComments,deleteMyComment,
   getAllCommentsForAdmin,moderateComment,deleteCommentForAdmin,} = require("../controllers/comment.controller");
 
 
-router.post("/", createComment);
+router.post("/", optionalCustomerAuth, createComment);
 
 router.get("/product/:productId", getProductComments);
 

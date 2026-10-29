@@ -137,8 +137,4 @@ if (passwordError) {
 
 
 
-module.exports = {
-  registerUser,
-  loginUser,
-  getCurrentUser
-};
+module.exports = {registerUser,loginUser,getCurrentUser};

@@ -202,10 +202,4 @@ const deleteSeason = async (req, res) => {
   }
 };
 
-module.exports = {
-  createSeason,
-  getAllSeasons,
-  getSeasonById,
-  updateSeason,
-  deleteSeason,
-};
+module.exports = { createSeason, getAllSeasons, getSeasonById, updateSeason, deleteSeason,};

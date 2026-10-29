@@ -11,19 +11,13 @@ const slugify = require("slugify");
 
 // Generate Unique Slug
 const generateUniqueSlug = async (name, productId = null) => {
-  const baseSlug = slugify(name, {
-    lower: true,
-    strict: true,
-  });
+  const baseSlug = slugify(name, { lower: true,strict: true,});
 
   let slug = baseSlug;
   let counter = 1;
 
   while (true) {
-    const existingProduct = await Product.findOne({
-      slug,
-      ...(productId && { _id: { $ne: productId } }),
-    });
+    const existingProduct = await Product.findOne({ slug, ...(productId && { _id: { $ne: productId } }),});
 
     if (!existingProduct) {
       break;
@@ -85,9 +79,7 @@ if (uniqueVariantIds.length !== variants.length) {
   });
 } 
     
-   const existingVariants = await ProductVariant.find({
-  _id: { $in: uniqueVariantIds },
-}).select("_id");
+   const existingVariants = await ProductVariant.find({ _id: { $in: uniqueVariantIds },}).select("_id");
 
 if (existingVariants.length !== uniqueVariantIds.length) {
   return res.status(404).json({
@@ -112,11 +104,7 @@ if (alreadyLinkedVariant) {
 
 
       const images = (req.files || []).map((file, index) => ({
-  filename: file.filename,
-  url: `/uploads/products/${file.filename}`,
-  alt: name?.trim() || "",
-  isPrimary: index === 0,
-}));
+  filename: file.filename,url: `/uploads/products/${file.filename}`,alt: name?.trim() || "",isPrimary: index === 0,}));
 
     // --------------------------------
 // Boolean Validation
@@ -137,8 +125,7 @@ const normalizedNewArrival = normalizeBoolean(newArrival);
 const booleanFields = {
   featured: normalizedFeatured,
   bestSeller: normalizedBestSeller,
-  newArrival: normalizedNewArrival,
-};
+newArrival: normalizedNewArrival,};
 
 for (const [field, value] of Object.entries(booleanFields)) {
   if (value === null) {
@@ -253,11 +240,7 @@ if (imageUrls.length !== uniqueUrls.length) {
     // Check Category
     // -----------------------------
 
-    const categoryExists = await Category.findOne({
-      _id: category,
-      isDeleted: false,
-      isActive: true,
-    });
+    const categoryExists = await Category.findOne({_id: category, isDeleted: false,isActive: true,});
 
     if (!categoryExists) {
       return res.status(404).json({
@@ -271,11 +254,7 @@ if (imageUrls.length !== uniqueUrls.length) {
     // Check Product Type
     // -----------------------------
 
-    const productTypeExists = await ProductType.findOne({
-      _id: productType,
-      isDeleted: false,
-      isActive: true,
-    });
+    const productTypeExists = await ProductType.findOne({_id: productType, isDeleted: false, isActive: true,});
 
     if (!productTypeExists) {
       return res.status(404).json({
@@ -289,12 +268,7 @@ if (imageUrls.length !== uniqueUrls.length) {
     // Check Sub Category
     // -----------------------------
 
-     const subCategoryExists = await SubCategory.findOne({
-  _id: subCategory,
-  category: category,
-  isDeleted: false,
-  isActive: true,
-});
+     const subCategoryExists = await SubCategory.findOne({_id: subCategory,category: category,isDeleted: false, isActive: true,});
 
 if (!subCategoryExists) {
   return res.status(404).json({
@@ -308,11 +282,7 @@ if (!subCategoryExists) {
     // Check Fabric Type
     // -----------------------------
 
-    const fabricTypeExists = await FabricType.findOne({
-      _id: fabricType,
-      isDeleted: false,
-      isActive: true,
-    });
+    const fabricTypeExists = await FabricType.findOne({ _id: fabricType, isDeleted: false, isActive: true,});
 
     if (!fabricTypeExists) {
       return res.status(404).json({
@@ -326,11 +296,7 @@ if (!subCategoryExists) {
     // Check Brand
     // -----------------------------
 
-    const brandExists = await Brand.findOne({
-      _id: brand,
-      isDeleted: false,
-      isActive: true,
-    });
+    const brandExists = await Brand.findOne({ _id: brand, isDeleted: false, isActive: true,});
 
     if (!brandExists) {
       return res.status(404).json({
@@ -345,11 +311,7 @@ if (!subCategoryExists) {
     // -----------------------------
 
     if (season) {
-      const seasonExists = await Season.findOne({
-        _id: season,
-        isDeleted: false,
-        isActive: true,
-      });
+      const seasonExists = await Season.findOne({ _id: season, isDeleted: false, isActive: true, });
 
       if (!seasonExists) {
         return res.status(404).json({
@@ -373,20 +335,9 @@ if (!subCategoryExists) {
      const [product] = await Product.create(
   [
     {
-      name,
-      category,
-      productType,
-      subCategory,
-      fabricType,
-      brand,
-      season: season || null,
-      slug,
-      description: description || "",
-      images: images || [],
-      variants: uniqueVariantIds,
-      featured: normalizedFeatured ?? false,
-      bestSeller: normalizedBestSeller ?? false,
-      newArrival: normalizedNewArrival ?? false,
+      name,category,productType,subCategory,fabricType,brand,season: season || null,
+      slug,description: description || "",images: images || [],variants: uniqueVariantIds,
+      featured: normalizedFeatured ?? false,bestSeller: normalizedBestSeller ?? false,newArrival: normalizedNewArrival ?? false,
     },
   ],
 
@@ -440,26 +391,9 @@ await ProductVariant.updateMany(
 const getAllProducts = async (req, res) => {
   try {
    
-    const {
-  search,
-  category,
-  productType,
-  subCategory,
-  fabricType,
-  brand,
-  season,
-  featured,
-  bestSeller,
-  newArrival,
-  minPrice,
-  maxPrice,
-  color,
-  size,
-  design,
-  page = 1,
-  limit = 20,
-  sort = "newest",
-} = req.query;
+    const {search,category,productType, subCategory,fabricType,brand,
+  season,featured,bestSeller,newArrival,minPrice,maxPrice,
+  color,size,design,page = 1,limit = 20, sort = "newest",} = req.query;
 
     // --------------------------------
     // Pagination
@@ -467,10 +401,7 @@ const getAllProducts = async (req, res) => {
 
     const currentPage = Math.max(parseInt(page, 10) || 1, 1);
 
-    const perPage = Math.min(
-      Math.max(parseInt(limit, 10) || 20, 1),
-      100
-    );
+    const perPage = Math.min( Math.max(parseInt(limit, 10) || 20, 1), 100);
 
     const skip = (currentPage - 1) * perPage;
 
@@ -479,10 +410,7 @@ const getAllProducts = async (req, res) => {
     // Base Filter
     // --------------------------------
 
-    const filter = {
-      isDeleted: false,
-      isActive: true,
-    };
+    const filter = {isDeleted: false, isActive: true,};
 
 
     // --------------------------------
@@ -490,107 +418,64 @@ const getAllProducts = async (req, res) => {
     // --------------------------------
 
   if (search && search.trim()) {
-  filter.name = {
-    $regex: search.trim(),
-    $options: "i",
-  };
-}
+  filter.name = {$regex: search.trim(),$options: "i", };}
 
 
-    // --------------------------------
-    // Category
-    // --------------------------------
+  
 
     if (category) {
       filter.category = category;
     }
 
 
-    // --------------------------------
-    // Product Type
-    // --------------------------------
-
     if (productType) {
       filter.productType = productType;
     }
 
-
-    // --------------------------------
-    // Sub Category
-    // --------------------------------
 
     if (subCategory) {
       filter.subCategory = subCategory;
     }
 
 
-    // --------------------------------
-    // Fabric Type
-    // --------------------------------
+
 
     if (fabricType) {
       filter.fabricType = fabricType;
     }
 
 
-    // --------------------------------
-    // Brand
-    // --------------------------------
 
     if (brand) {
       filter.brand = brand;
     }
 
 
-    // --------------------------------
-    // Season
-    // --------------------------------
-
     if (season) {
       filter.season = season;
     }
 
-
-    // --------------------------------
-// Featured Filter
-// --------------------------------
 
 if (featured !== undefined) {
   filter.featured = featured === "true";
 }
 
 
-// --------------------------------
-// Best Seller Filter
-// --------------------------------
-
 if (bestSeller !== undefined) {
   filter.bestSeller = bestSeller === "true";
 }
 
 
-// --------------------------------
-// New Arrival Filter
-// --------------------------------
 
 if (newArrival !== undefined) {
   filter.newArrival = newArrival === "true";
 }
 
-  // Variant Attribute Filters
 
   const attributeFilters = [];
 
   if (color && color.trim()) {
-    attributeFilters.push({
-      "attributes": {
-        $elemMatch: {
-          key: "color",
-          value: color.trim(),
-        },
-      },
-    });
-  }
+    attributeFilters.push({"attributes": { $elemMatch: {key: "color", value: color.trim(), }, }, }); }
 
   if (size && size.trim()) {
     attributeFilters.push({
@@ -604,37 +489,21 @@ if (newArrival !== undefined) {
   }
 
   if (design && design.trim()) {
-    attributeFilters.push({
-      "attributes": {
-        $elemMatch: {
-          key: "design",
-          value: design.trim(),
-        },
-      },
-    });
-  }
+    attributeFilters.push({"attributes": {$elemMatch: {key: "design",  value: design.trim(), }, }, });}
 
   if (attributeFilters.length > 0) {
-    const matchingVariants = await ProductVariant.find({
-      product: { $ne: null },
-      $and: attributeFilters,
-    }).select("product");
+    const matchingVariants = await ProductVariant.find({ product: { $ne: null }, $and: attributeFilters,}).select("product");
 
     const matchingProductIds = matchingVariants.map(
       (variant) => variant.product
     );
 
-    filter._id = {
-      ...(filter._id || {}),
-      $in: matchingProductIds,
-    };
-  }
+    filter._id = {...(filter._id || {}), $in: matchingProductIds,};}
   
     // Price Filter
 if (minPrice !== undefined || maxPrice !== undefined) {
   const min = minPrice !== undefined ? Number(minPrice) : 0;
-  const max =
-    maxPrice !== undefined ? Number(maxPrice) : Number.MAX_SAFE_INTEGER;
+  const max = maxPrice !== undefined ? Number(maxPrice) : Number.MAX_SAFE_INTEGER;
 
   if (Number.isNaN(min) || Number.isNaN(max)) {
     return res.status(400).json({
@@ -657,16 +526,11 @@ if (minPrice !== undefined || maxPrice !== undefined) {
     });
   }
 
-  const matchingVariants = await ProductVariant.find({
-    product: { $ne: null },
-  }).select("product price salePrice");
+  const matchingVariants = await ProductVariant.find({ product: { $ne: null },}).select("product price salePrice");
 
   const matchingProductIds = matchingVariants
     .filter((variant) => {
-      const effectivePrice =
-        variant.salePrice !== null && variant.salePrice !== undefined
-          ? variant.salePrice
-          : variant.price;
+      const effectivePrice = variant.salePrice !== null && variant.salePrice !== undefined ? variant.salePrice: variant.price;
 
       return effectivePrice >= min && effectivePrice <= max;
     })
@@ -681,9 +545,7 @@ if (minPrice !== undefined || maxPrice !== undefined) {
     // Sorting
     // --------------------------------
 
-    let sortOption = {
-      createdAt: -1,
-    };
+    let sortOption = { createdAt: -1,};
 
    const isPriceSort =
   sort === "price_low" || sort === "price_high";
@@ -742,9 +604,7 @@ if (isPriceSort) {
 
       const productIds = products.map((product) => product._id);
 
-const variants = await ProductVariant.find({
-  product: { $in: productIds },
-});
+const variants = await ProductVariant.find({ product: { $in: productIds },});
 
 const productsWithVariants = products.map((product) => {
   const productObject = product.toObject();
@@ -753,11 +613,7 @@ const productsWithVariants = products.map((product) => {
     (variant) => variant.product.toString() === product._id.toString()
   );
 
-  return {
-    ...productObject,
-    variants: productVariants,
-  };
-});
+  return {...productObject,variants: productVariants,};});
 
 const productsWithDetails = productsWithVariants.map((product) => {
   const productObject = { ...product };
@@ -773,64 +629,30 @@ const productsWithDetails = productsWithVariants.map((product) => {
     .filter((price) => typeof price === "number");
 
   const totalStock = productVariants.reduce(
-    (total, variant) => total + (variant.stock || 0),
-    0
-  );
+    (total, variant) => total + (variant.stock || 0), 0);
 
   const lowestPrice = prices.length ? Math.min(...prices) : 0;
   const highestPrice = prices.length ? Math.max(...prices) : 0;
 
-  const lowestOriginalPrice = originalPrices.length
-    ? Math.min(...originalPrices)
-    : 0;
+  const lowestOriginalPrice = originalPrices.length ? Math.min(...originalPrices): 0;
 
   const isOnSale = productVariants.some(
-    (variant) =>
-      variant.salePrice !== undefined &&
-      variant.salePrice < variant.price
-  );
+    (variant) => variant.salePrice !== undefined && variant.salePrice < variant.price );
 
   const discountPercentage =
     lowestOriginalPrice > 0 && lowestPrice < lowestOriginalPrice
-      ? Math.round(
-          ((lowestOriginalPrice - lowestPrice) /
-            lowestOriginalPrice) *
-            100
-        )
-      : 0;
+      ? Math.round( ((lowestOriginalPrice - lowestPrice) / lowestOriginalPrice) * 100 ): 0;
 
-  const amountSaved =
-    isOnSale && lowestOriginalPrice > lowestPrice
-      ? lowestOriginalPrice - lowestPrice
-      : 0;
+  const amountSaved = isOnSale && lowestOriginalPrice > lowestPrice? lowestOriginalPrice - lowestPrice: 0;
 
-  const thumbnail =
-    productObject.images?.find((img) => img.isPrimary) ||
-    productObject.images?.[0] ||
-    null;
+  const thumbnail = productObject.images?.find((img) => img.isPrimary) || productObject.images?.[0] || null;
 
   const inStock = totalStock > 0;
 
-  const stockStatus =
-    totalStock === 0
-      ? "Out of Stock"
-      : totalStock <= 5
-      ? "Low Stock"
-      : "In Stock";
+  const stockStatus = totalStock === 0 ? "Out of Stock": totalStock <= 5 ? "Low Stock": "In Stock";
 
-  return {
-    ...productObject,
-    price: lowestPrice,
-    maxPrice: highestPrice,
-    discountPercentage,
-    isOnSale,
-    amountSaved,
-    thumbnail,
-    totalStock,
-    inStock,
-    stockStatus,
-  };
-});
+  return {...productObject,price: lowestPrice,maxPrice: highestPrice,
+    discountPercentage,isOnSale,amountSaved,thumbnail,totalStock,inStock,stockStatus,};});
 
    if (isPriceSort) {
   productsWithDetails.sort((a, b) => {
@@ -864,14 +686,7 @@ const productsWithDetails = productsWithVariants.map((product) => {
   success: true,
  count: paginatedProducts.length,
 
-  pagination: {
-    currentPage,
-    limit: perPage,
-    totalProducts,
-    totalPages,
-    hasNextPage: currentPage < totalPages,
-    hasPreviousPage: currentPage > 1,
-  },
+  pagination: { currentPage,limit: perPage,totalProducts,totalPages,hasNextPage: currentPage < totalPages,hasPreviousPage: currentPage > 1,},
 
  products: paginatedProducts,
 });
@@ -899,11 +714,7 @@ const getProductById = async (req, res) => {
       });
     }
 
-    const product = await Product.findOne({
-      _id: id,
-      isDeleted: false,
-      isActive: true,
-    })
+    const product = await Product.findOne({_id: id,isDeleted: false,isActive: true,})
       .populate("category", "name slug")
       .populate("productType", "name slug")
       .populate("subCategory", "name slug")
@@ -944,9 +755,7 @@ const totalStock = productVariants.reduce(
 const lowestPrice = prices.length ? Math.min(...prices) : 0;
 const highestPrice = prices.length ? Math.max(...prices) : 0;
 
-const lowestOriginalPrice = originalPrices.length
-  ? Math.min(...originalPrices)
-  : 0;
+const lowestOriginalPrice = originalPrices.length ? Math.min(...originalPrices) : 0;
 
 const isOnSale = productVariants.some(
   (variant) =>
@@ -956,43 +765,19 @@ const isOnSale = productVariants.some(
 
 const discountPercentage =
   lowestOriginalPrice > 0 && lowestPrice < lowestOriginalPrice
-    ? Math.round(
-        ((lowestOriginalPrice - lowestPrice) /
-          lowestOriginalPrice) *
-          100
-      )
-    : 0;
+    ? Math.round( ((lowestOriginalPrice - lowestPrice) / lowestOriginalPrice) * 100 ) : 0;
 
 const amountSaved =
-  isOnSale && lowestOriginalPrice > lowestPrice
-    ? lowestOriginalPrice - lowestPrice
-    : 0;
+  isOnSale && lowestOriginalPrice > lowestPrice ? lowestOriginalPrice - lowestPrice : 0;
 
 const inStock = totalStock > 0;
 
-const stockStatus =
-  totalStock === 0
-    ? "Out of Stock"
-    : totalStock <= 5
-    ? "Low Stock"
-    : "In Stock";
+const stockStatus =totalStock === 0 ? "Out of Stock": totalStock <= 5? "Low Stock": "In Stock";
 
 res.status(200).json({
   success: true,
-  product: {
-  ...productObject,
-  price: lowestPrice,
-  maxPrice: highestPrice,
-  discountPercentage,
-  isOnSale,
-  amountSaved,
-  totalStock,
-  inStock,
-  stockStatus,
-  thumbnail,
-},
-
-});
+  product: { ...productObject, price: lowestPrice,maxPrice: highestPrice, discountPercentage, isOnSale,
+  amountSaved,totalStock,inStock,stockStatus,thumbnail,},});
 
   } catch (error) {
     console.log(error);
@@ -1020,10 +805,7 @@ const updateProduct = async (req, res) => {
       });
     }
 
-    const product = await Product.findOne({
-      _id: id,
-      isDeleted: false,
-    });
+    const product = await Product.findOne({_id: id,isDeleted: false,});
 
     if (!product) {
       return res.status(404).json({
@@ -1032,21 +814,7 @@ const updateProduct = async (req, res) => {
       });
     }
 
-   const {
-  name,
-  category,
-  productType,
-  subCategory,
-  fabricType,
-  brand,
-  season,
-  description,
-  images,
-  featured,
-  bestSeller,
-  newArrival,
-  isActive,
-} = req.body;
+   const {name, category,productType,subCategory,fabricType, brand, season,description,images,featured,bestSeller, newArrival,isActive,} = req.body;
 
 let { variants } = req.body;
 
@@ -1083,9 +851,7 @@ if (variants !== undefined) {
     });
   }
 
-  uniqueVariantIds = [
-    ...new Set(variants.map((id) => id.toString())),
-  ];
+  uniqueVariantIds = [ ...new Set(variants.map((id) => id.toString())),];
 
   if (uniqueVariantIds.length !== variants.length) {
     return res.status(400).json({
@@ -1094,9 +860,7 @@ if (variants !== undefined) {
     });
   }
 
-  const existingVariants = await ProductVariant.find({
-  _id: { $in: uniqueVariantIds },
-}).select("_id");
+  const existingVariants = await ProductVariant.find({ _id: { $in: uniqueVariantIds },}).select("_id");
 
 if (existingVariants.length !== uniqueVariantIds.length) {
   return res.status(404).json({
@@ -1105,12 +869,8 @@ if (existingVariants.length !== uniqueVariantIds.length) {
   });
 }
 
-const alreadyLinkedVariant = await ProductVariant.findOne({
-  _id: { $in: uniqueVariantIds },
-  product: {
-    $nin: [null, product._id],
-  },
-}).select("_id product");
+const alreadyLinkedVariant = await ProductVariant.findOne({_id: { $in: uniqueVariantIds },
+  product: { $nin: [null, product._id],},}).select("_id product");
 
 if (alreadyLinkedVariant) {
   return res.status(400).json({
@@ -1127,11 +887,9 @@ if (alreadyLinkedVariant) {
 // Validate Category & Sub Category
 // --------------------------------
 
-const newCategory =
-  category !== undefined ? category : product.category;
+const newCategory = category !== undefined ? category : product.category;
 
-const newSubCategory =
-  subCategory !== undefined ? subCategory : product.subCategory;
+const newSubCategory = subCategory !== undefined ? subCategory : product.subCategory;
 
 // Validate Category if changed
 if (category) {
@@ -1142,11 +900,7 @@ if (category) {
     });
   }
 
-  const categoryExists = await Category.findOne({
-    _id: category,
-    isDeleted: false,
-    isActive: true,
-  });
+  const categoryExists = await Category.findOne({_id: category,isDeleted: false, isActive: true,});
 
   if (!categoryExists) {
     return res.status(404).json({
@@ -1165,12 +919,7 @@ if (subCategory) {
     });
   }
 
-  const subCategoryExists = await SubCategory.findOne({
-    _id: subCategory,
-    category: newCategory,
-    isDeleted: false,
-    isActive: true,
-  });
+  const subCategoryExists = await SubCategory.findOne({ _id: subCategory,category: newCategory, isDeleted: false,isActive: true,});
 
   if (!subCategoryExists) {
     return res.status(404).json({
@@ -1186,12 +935,7 @@ if (subCategory) {
 // --------------------------------
 
 if (category !== undefined && subCategory === undefined) {
-  const currentSubCategory = await SubCategory.findOne({
-    _id: product.subCategory,
-    category: newCategory,
-    isDeleted: false,
-    isActive: true,
-  });
+  const currentSubCategory = await SubCategory.findOne({_id: product.subCategory,category: newCategory,isDeleted: false, isActive: true,});
 
   if (!currentSubCategory) {
     return res.status(400).json({
@@ -1228,9 +972,7 @@ if (subCategory !== undefined) {
 
       const productTypeExists = await ProductType.findOne({
         _id: productType,
-        isDeleted: false,
-        isActive: true,
-      });
+        isDeleted: false, isActive: true,});
 
       if (!productTypeExists) {
         return res.status(404).json({
@@ -1868,12 +1610,4 @@ if (variantIds.length === 0) {
 };
 
 
-module.exports = {
-  createProduct,
-  getAllProducts,
- getProductById,
-  updateProduct,
-   deleteProduct,
-  getDeletedProducts,
-  restoreProduct,
-};
+module.exports = {createProduct, getAllProducts,getProductById, updateProduct, deleteProduct, getDeletedProducts, restoreProduct,};

@@ -37,19 +37,14 @@ const customerSchema = new mongoose.Schema(
     
     otpResendAvailableAt: { type: Date,default: null,},
 
-  
-
-    refreshToken: { type: String, default: "",},
+   refreshToken: { type: String, default: "",},
 
     tokenVersion: { type: Number,default: 0,},
 
     lastLogin: { type: Date,default: null,},
 
 
-    
-  isActive: { type: Boolean, default: true,},
-
- 
+    isActive: { type: Boolean, default: true,},
 
    loginAttempts: { type: Number, default: 0,},
 
@@ -60,9 +55,7 @@ const customerSchema = new mongoose.Schema(
   isDeleted: { type: Boolean, default: false,},
   },
 
-  {
-    timestamps: true,
-  }
+  { timestamps: true,}
 );
 
 module.exports = mongoose.model("Customer", customerSchema);

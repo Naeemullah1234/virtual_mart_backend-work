@@ -36,7 +36,7 @@ if (decoded.role === "admin") {
   account = await Admin.findById(decoded.id)
     .select("-password -refreshToken -otp -otpExpiresAt");
 
-  console.log("ADMIN FOUND:", account);
+  
 
   if (!account) {
     return res.status(401).json({
@@ -48,7 +48,6 @@ if (decoded.role === "admin") {
   account = await Customer.findById(decoded.id)
     .select("-password -refreshToken -otp -otpExpiresAt");
 
-  console.log("CUSTOMER FOUND:", account);
 
   if (!account) {
     return res.status(401).json({

@@ -116,10 +116,4 @@ const createCategory = async (req, res) => {
 
         res.status(500).json({ success: false, message: "Server Error" });}};
 
-module.exports = {
-  createCategory,
-  getAllCategories,
-  getCategoryById,
-  updateCategory,
-  deleteCategory,
-};
+module.exports = {createCategory,getAllCategories,getCategoryById,updateCategory,deleteCategory,};

@@ -1065,12 +1065,4 @@ const updateOrderStatus = async (req, res) => {
 
 
 
-module.exports = {
-  createOrder,
-   getMyOrders,
-    getMyOrderById,
-    cancelMyOrder,
-    downloadMyInvoice,
-    getAllOrders,
-    updateOrderStatus
-};
+module.exports = {createOrder,getMyOrders,getMyOrderById,cancelMyOrder,downloadMyInvoice,getAllOrders,updateOrderStatus};

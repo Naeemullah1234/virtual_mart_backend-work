@@ -203,11 +203,4 @@ const deleteProductType = async (req, res) => {
   }
 };
 
-module.exports = {
-  createProductType,
-  getAllProductTypes,
-  getProductTypeById,
-  updateProductType,
-  deleteProductType,
-  
-};
+module.exports = { createProductType, getAllProductTypes, getProductTypeById, updateProductType, deleteProductType,};

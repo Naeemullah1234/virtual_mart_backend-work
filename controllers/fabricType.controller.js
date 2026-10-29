@@ -108,10 +108,4 @@ const createFabricType = async (req, res) => {
 
     res.status(500).json({ success: false,message: "Server Error",});}};
 
-module.exports = {
-  createFabricType,
-  getAllFabricTypes,
-  getFabricTypeById,
-  updateFabricType,
-  deleteFabricType
-};
+module.exports = {createFabricType,getAllFabricTypes,getFabricTypeById,updateFabricType,deleteFabricType};

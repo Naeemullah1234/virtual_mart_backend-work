@@ -218,8 +218,4 @@ const validateCoupon = async (req, res) => {
   }
 };
 
-module.exports = {
-  createCoupon,
-  getAllCoupons,
-  validateCoupon,
-};
+module.exports = {createCoupon,getAllCoupons,validateCoupon,};

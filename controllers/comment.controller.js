@@ -1,7 +1,7 @@
-
 const mongoose = require("mongoose");
 const Comment = require("../models/comment.model");
 const Product = require("../models/product.model");
+
 
 
 const createComment = async (req, res) => {
@@ -16,20 +16,36 @@ const createComment = async (req, res) => {
     }
 
     if (typeof comment !== "string" || !comment.trim()) {
-      return res.status(400).json({
-        success: false,
-        message: "Comment text is required.",
-      });
-    }
+  return res.status(400).json({
+    success: false,
+    message: "Comment text is required.",
+  });
+}
 
-    if (comment.trim().length > 1000) {
-      return res.status(400).json({
-        success: false,
-        message: "Comment cannot exceed 1000 characters.",
-      });
-    }
+// Multiple spaces ko single space karein
+const cleanComment = comment.trim().replace(/\s+/g, " ");
 
-    const product = await Product.findById(productId);
+// Minimum 3 words
+if (cleanComment.split(" ").length < 3) {
+  return res.status(400).json({
+    success: false,
+    message: "Comment must contain at least 3 words.",
+  });
+}
+
+// Maximum 100 characters
+if (cleanComment.length > 100) {
+  return res.status(400).json({
+    success: false,
+    message: "Comment cannot exceed 100 characters.",
+  });
+}
+
+    const product = await Product.findOne({
+      _id: productId,
+      isActive: true,
+      isDeleted: false,
+    });
 
     if (!product) {
       return res.status(404).json({
@@ -39,19 +55,19 @@ const createComment = async (req, res) => {
     }
 
     const loggedInCustomer =
-      req.user && req.user.role === "customer" ? req.user._id : null;
+      req.user?.role === "customer" ? req.user._id : null;
 
     const safeGuestName = loggedInCustomer
-      ? undefined: typeof guestName === "string" && guestName.trim()
-      
-        ? guestName.trim().slice(0, 80): "Guest";
+      ? undefined
+      : "Visitor";
 
-    const newComment = await Comment.create({
-      product: product._id,
-      customer: loggedInCustomer,
-      guestName: safeGuestName,
-      comment: comment.trim(),
-    });
+   const newComment = await Comment.create({
+  product: product._id,
+  customer: loggedInCustomer,
+  guestName: loggedInCustomer ? null : "Visitor",
+  comment: cleanComment,
+  isApproved: false,
+});
 
     return res.status(201).json({
       success: true,
@@ -59,6 +75,8 @@ const createComment = async (req, res) => {
       comment: newComment,
     });
   } catch (error) {
+    console.error("Create comment error:", error);
+
     return res.status(500).json({
       success: false,
       message: "Failed to create comment.",
@@ -66,7 +84,8 @@ const createComment = async (req, res) => {
   }
 };
 
-// Public: get approved comments for a product
+
+
 const getProductComments = async (req, res) => {
   try {
     const { productId } = req.params;
@@ -83,7 +102,7 @@ const getProductComments = async (req, res) => {
       isApproved: true,
     })
       .select("guestName customer comment createdAt")
-      .populate("customer", "name")
+      .populate("customer", "firstName lastName")
       .sort({ createdAt: -1 });
 
     return res.status(200).json({
@@ -99,7 +118,7 @@ const getProductComments = async (req, res) => {
   }
 };
 
-// Customer: delete their own comment (login required)
+
 const deleteMyComment = async (req, res) => {
   try {
     if (!mongoose.isValidObjectId(req.params.commentId)) {
@@ -133,7 +152,7 @@ const deleteMyComment = async (req, res) => {
   }
 };
 
-// Admin: list all comments for moderation
+
 const getAllCommentsForAdmin = async (req, res) => {
   try {
     const comments = await Comment.find()
@@ -154,7 +173,7 @@ const getAllCommentsForAdmin = async (req, res) => {
   }
 };
 
-// Admin: approve or reject a comment
+
 const moderateComment = async (req, res) => {
   try {
     const { isApproved } = req.body;
@@ -199,7 +218,7 @@ const moderateComment = async (req, res) => {
   }
 };
 
-// Admin: delete any comment
+
 const deleteCommentForAdmin = async (req, res) => {
   try {
     if (!mongoose.isValidObjectId(req.params.commentId)) {
@@ -230,11 +249,4 @@ const deleteCommentForAdmin = async (req, res) => {
   }
 };
 
-module.exports = {
-  createComment,
-  getProductComments,
-  deleteMyComment,
-  getAllCommentsForAdmin,
-  moderateComment,
-  deleteCommentForAdmin,
-};
+module.exports = { createComment,getProductComments,deleteMyComment,getAllCommentsForAdmin,moderateComment,deleteCommentForAdmin,};
