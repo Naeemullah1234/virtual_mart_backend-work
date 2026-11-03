@@ -1,32 +1,18 @@
 const express = require("express");
 const { protect, authorize } = require("../middleware/auth.middleware");
-
 const router = express.Router();
 const upload = require("../middleware/upload.middleware");
-
 const { createProduct, getAllProducts,getProductById, updateProduct, deleteProduct, getDeletedProducts,
-  restoreProduct,} = require("../controllers/product.controller");
+restoreProduct,} = require("../controllers/product.controller");
 
-router.post("/",protect,authorize("admin"), upload.array("images", 10),createProduct);
-
- router.put("/:id",protect,authorize("admin"),upload.array("images", 10),updateProduct);
-
+router.post("/",protect,authorize("admin"), upload.array("images", 5),createProduct);
+router.put("/:id",protect,authorize("admin"),upload.array("images", 5),updateProduct);
 router.get("/", getAllProducts);
-
 router.get("/deleted",protect,authorize("admin"),getDeletedProducts);
-
- router.put("/:id/restore",protect,authorize("admin"),restoreProduct);
-
-
-
+router.put("/:id/restore",protect,authorize("admin"),restoreProduct);
 router.get("/:id", getProductById);
+router.delete("/:id",protect,authorize("admin"),deleteProduct);
 
  
-
- router.delete("/:id",protect,authorize("admin"),deleteProduct);
-
- 
-
-
 
 module.exports = router;

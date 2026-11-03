@@ -6,7 +6,7 @@ const Product = require("../models/product.model");
 
 const createComment = async (req, res) => {
   try {
-    const { productId, comment, guestName } = req.body;
+    const { productId, comment} = req.body;
 
     if (!mongoose.isValidObjectId(productId)) {
       return res.status(400).json({
@@ -22,18 +22,17 @@ const createComment = async (req, res) => {
   });
 }
 
-// Multiple spaces ko single space karein
+
 const cleanComment = comment.trim().replace(/\s+/g, " ");
 
-// Minimum 3 words
-if (cleanComment.split(" ").length < 3) {
+
+if (cleanComment.length < 5) {
   return res.status(400).json({
     success: false,
-    message: "Comment must contain at least 3 words.",
+    message: "Comment must contain at least 5 characters.",
   });
 }
 
-// Maximum 100 characters
 if (cleanComment.length > 100) {
   return res.status(400).json({
     success: false,
@@ -57,9 +56,7 @@ if (cleanComment.length > 100) {
     const loggedInCustomer =
       req.user?.role === "customer" ? req.user._id : null;
 
-    const safeGuestName = loggedInCustomer
-      ? undefined
-      : "Visitor";
+  
 
    const newComment = await Comment.create({
   product: product._id,
@@ -155,10 +152,10 @@ const deleteMyComment = async (req, res) => {
 
 const getAllCommentsForAdmin = async (req, res) => {
   try {
-    const comments = await Comment.find()
-      .populate("customer", "name email")
-      .populate("product", "name")
-      .sort({ createdAt: -1 });
+   const comments = await Comment.find()
+  .populate("customer", "firstName lastName email")
+  .populate("product", "name")
+  .sort({ createdAt: -1 });
 
     return res.status(200).json({
       success: true,

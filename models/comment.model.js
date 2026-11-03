@@ -7,9 +7,9 @@ const commentSchema = new mongoose.Schema(
 
      customer: { type: mongoose.Schema.Types.ObjectId, ref: "Customer", default: null,},
 
-     guestName: {type: String,trim: true,maxlength: 80, default: "Guest",},
+     guestName: {type: String,trim: true,maxlength: 80, default: null,},
 
-    comment: {type: String, required: true, trim: true,minlength: 1,maxlength: 100,},
+    comment: {type: String, required: true, trim: true,minlength: 5, maxlength: 100,},
     
     isApproved: {type: Boolean,default: false,},
   },

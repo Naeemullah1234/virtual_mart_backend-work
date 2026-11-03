@@ -1,68 +1,35 @@
-
 const mongoose = require("mongoose");
 
 const reviewSchema = new mongoose.Schema(
   {
-    customer: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Customer",
-      required: true,
-    },
 
-    product: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Product",
-      required: true,
-    },
+    customer: {type: mongoose.Schema.Types.ObjectId,ref: "Customer",required: true,},
 
-    rating: {
-      type: Number,
-      required: true,
-      min: 1,
-      max: 5,
-    },
+    product: {type: mongoose.Schema.Types.ObjectId,ref: "Product",required: true,},
 
-    comment: {
-      type: String,
-      required: true,
-      trim: true,
-      maxlength: 1000,
-    },
+    order: {type: mongoose.Schema.Types.ObjectId,ref: "Order",required: true,},
+
+    rating: {type: Number,required: true,min: 1,max: 5,},
+
+    comment: {type: String,required: true,trim: true, minlength: 5,maxlength: 250,},
     
-    images: {
-      type: [
-        {
-          url: {
-            type: String,
-            required: true,
-          },
-          filename: {
-            type: String,
-            required: true,
-          },
-        },
-      ],
+   images: {
+    type: [{
+      url: {type: String,required: true,},
+      filename: {type: String,required: true,},
+      public_id: {type: String, required: true,},},],
       default: [],
-      validate: {
-       validator: function (images) {
-  return images.length <= 3;
-},
-message: "A review can contain a maximum of 3 images.",
-      },
-    },
+      validate: {validator: function (images) {
+      return images.length <= 3;},message: "A review can contain a maximum of 3 images.",},},
 
-
-    isApproved: {
-      type: Boolean,
-      default: false,
-    },
+      isApproved: {type: Boolean,default: false,},
   },
   { timestamps: true }
 );
 
 
 reviewSchema.index(
-  { customer: 1, product: 1 },
+  { customer: 1, product: 1, order: 1 },
   { unique: true }
 );
 
