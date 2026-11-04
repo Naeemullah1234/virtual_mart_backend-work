@@ -1,14 +1,14 @@
 const express = require("express");
 const router = express.Router();
 const { protect, authorize } = require("../middleware/auth.middleware");
-const upload = require("../middleware/upload.middleware");
+const reviewUpload = require("../middleware/reviewUpload.middleware");
 const {addReview,getMyReviews,updateMyReview,deleteMyReview,getAllReviewsForAdmin,
   moderateReview,getProductReviews,deleteReviewForAdmin} = require("../controllers/review.controller");
 
 
-router.post("/", protect, upload.array("images", 3), addReview);
+router.post("/", protect, reviewUpload, addReview);
 router.get("/my-reviews", protect, getMyReviews);
-router.put("/:reviewId",protect,upload.array("images", 3),updateMyReview);
+router.put("/:reviewId", protect, reviewUpload, updateMyReview);
 router.delete("/:reviewId", protect, deleteMyReview);
 router.get("/product/:productId", getProductReviews);
 router.get("/admin/all", protect, authorize("admin"), getAllReviewsForAdmin);

@@ -58,55 +58,48 @@ const sendOTPEmail = async (email, otp) => {
   }
 };
 
-  const sendInvoiceEmail = async (email, order, invoiceFilePath) => {
+   const sendInvoiceEmail = async (email, order, invoiceUrl) => {
   try {
+    const response = await fetch(invoiceUrl);
+
+if (!response.ok) {
+  const errorDetails = await response.text();
+
+  console.error("CLOUDINARY DOWNLOAD STATUS:", response.status);
+  console.error("CLOUDINARY DOWNLOAD URL:", invoiceUrl);
+  console.error("CLOUDINARY DOWNLOAD ERROR:", errorDetails);
+
+  throw new Error(
+    `Unable to download invoice. HTTP Status: ${response.status}`
+  );
+}
+
+    const invoiceBuffer = Buffer.from(
+      await response.arrayBuffer()
+    );
+
     const mailOptions = {
       from: `"Check Mart" <${process.env.EMAIL_USER}>`,
       to: email,
-
       subject: `Check Mart Invoice - ${order.orderNumber}`,
 
       html: `
         <div style="font-family: Arial, sans-serif; color: #333;">
-
           <h2>Check Mart</h2>
-
           <p>Dear ${order.shippingAddress.fullName},</p>
-
-          <p>
-            Thank you for shopping with Check Mart.
-          </p>
-
-          <p>
-            Your order has been placed successfully.
-          </p>
-
-          <p>
-            <strong>Order Number:</strong>
-            ${order.orderNumber}
-          </p>
-
-          <p>
-            <strong>Grand Total:</strong>
-            Rs. ${order.grandTotal.toFixed(2)}
-          </p>
-
-          <p>
-            Your invoice PDF is attached with this email.
-          </p>
-
-          <p>
-            Regards,<br>
-            Check Mart
-          </p>
-
+          <p>Thank you for shopping with Check Mart.</p>
+          <p>Your order has been placed successfully.</p>
+          <p><strong>Order Number:</strong> ${order.orderNumber}</p>
+          <p><strong>Grand Total:</strong> Rs. ${Number(order.grandTotal).toFixed(2)}</p>
+          <p>Your invoice PDF is attached with this email.</p>
+          <p>Regards,<br>Check Mart</p>
         </div>
       `,
 
       attachments: [
         {
           filename: `invoice-${order.orderNumber}.pdf`,
-          path: invoiceFilePath,
+          content: invoiceBuffer,
           contentType: "application/pdf",
         },
       ],
@@ -118,10 +111,9 @@ const sendOTPEmail = async (email, otp) => {
     console.log("========== INVOICE EMAIL ERROR ==========");
     console.log(error);
     console.log("=========================================");
-
     throw error;
   }
-}; 
+};
 
 
 

@@ -401,7 +401,7 @@ const generateInvoicePDF = (order, customer) =>
 rowY += 9;
 
       const summaryWidth = 225;
-const summaryHeight = order.discount > 0 ? 98 : 78;
+      const summaryHeight = order.discount > 0 ? 108 : 88;
       const summaryX = right - summaryWidth;
       const summaryTop = rowY;
 

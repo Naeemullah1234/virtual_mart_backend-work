@@ -11,6 +11,7 @@ const fs = require("fs");
 const path = require("path");
 const Coupon = require("../models/coupon.model");
 const OrderNotification = require("../models/orderNotification.model");
+const cloudinary = require("../config/cloudinary");
 
 
 // ========================================
@@ -388,41 +389,96 @@ if (appliedCouponCode) {
     // ----------------------------------------
     // Commit Transaction
     // ----------------------------------------
+    // ----------------------------------------
+// Commit Transaction
+// ----------------------------------------
 
-     await session.commitTransaction();
-session.endSession();
+await session.commitTransaction();
+await session.endSession();
 
 const createdOrder = order[0];
 
-let invoiceEmailSent = false;
+// ----------------------------------------
+// Generate Invoice & Send Email in Background
+// ----------------------------------------
 
-try {
+setImmediate(async () => {
+  try {
+    const customer = await Customer.findById(req.user._id)
+      .select("email");
 
-  const customer = await Customer.findById(req.user._id).select("email");
-  
-   const invoice = await generateInvoicePDF(createdOrder,customer);
+    if (!customer || !customer.email) {
+      console.error(
+        `Invoice email skipped: Customer email not found for order ${createdOrder.orderNumber}.`
+      );
+      return;
+    }
 
-  if (customer && customer.email) {
-    await sendInvoiceEmail(
-      customer.email,
-      createdOrder,
-      invoice.filePath
-    );
 
-    invoiceEmailSent = true;
+
+      const invoice = await generateInvoicePDF(
+  createdOrder,
+  customer
+);
+
+// Upload PDF to Cloudinary
+const uploadedInvoice = await cloudinary.uploader.upload(
+  invoice.filePath,
+  {
+    resource_type: "raw",
+    type: "authenticated",
+    folder: "virtual-mart/invoices",
+    public_id: `invoice-${createdOrder.orderNumber}.pdf`,
   }
-} catch (invoiceError) {
-  console.log("INVOICE ERROR:", invoiceError);
-}
-return res.status(201).json({
-  success: true,
-  message: invoiceEmailSent
-    ? "Order placed successfully and invoice emailed."
-    : "Order placed successfully, but invoice email could not be sent.",
-  invoiceEmailSent,
-  order: createdOrder,
+);
+
+// Generate secure URL for internal email attachment download
+const invoiceUrl = await cloudinary.utils.private_download_url(
+  uploadedInvoice.public_id,
+  "pdf",
+  {
+    resource_type: "raw",
+    type: "authenticated",
+  }
+);
+
+await sendInvoiceEmail(
+  customer.email,
+  createdOrder,
+  invoiceUrl
+);
+
+// Remove local PDF after successful upload and email
+const fs = require("fs");
+fs.unlink(invoice.filePath, (error) => {
+  if (error) {
+    console.error("LOCAL INVOICE CLEANUP ERROR:", error.message);
+  }
 });
 
+    console.log(
+      `Invoice emailed successfully for order ${createdOrder.orderNumber}.`
+    );
+
+  } catch (invoiceError) {
+    console.error(
+      `INVOICE BACKGROUND ERROR for order ${createdOrder.orderNumber}:`,
+      invoiceError
+    );
+  }
+});
+
+// ----------------------------------------
+// Send API Response Immediately
+// ----------------------------------------
+
+return res.status(201).json({
+  success: true,
+  message: "Order placed successfully. Invoice is being processed.",
+  invoiceEmailQueued: true,
+  order: createdOrder,
+});
+    
   } catch (error) {
     await session.abortTransaction();
     session.endSession();
@@ -963,9 +1019,10 @@ const updateOrderStatus = async (req, res) => {
     });
 
     // Transaction committed. Attempt email immediately.
-    let statusEmailSent = false;
-
-    if (notificationId) {
+    // Transaction committed. Send email in background.
+if (notificationId) {
+  setImmediate(async () => {
+    try {
       const now = new Date();
 
       const notification =
@@ -993,61 +1050,62 @@ const updateOrderStatus = async (req, res) => {
           { new: true }
         );
 
-      if (notification) {
-        try {
-          await sendOrderStatusEmail(
-            notification.email,
-            order,
-            orderStatus
-          );
+      if (!notification) return;
 
-          await OrderNotification.updateOne(
-            { _id: notificationId },
-            {
-              $set: {
-                sent: true,
-                sentAt: new Date(),
-                lastError: "",
-                lockedUntil: null,
-              },
-            }
-          );
+      try {
+        await sendOrderStatusEmail(
+          notification.email,
+          order,
+          orderStatus
+        );
 
-          statusEmailSent = true;
-        } catch (emailError) {
-          await OrderNotification.updateOne(
-            { _id: notificationId },
-            {
-              $set: {
-                lastError:
-                  emailError.message || "Email sending failed.",
-                nextRetryAt: new Date(
-                  Date.now() + 5 * 60 * 1000
-                ),
-                lockedUntil: null,
-              },
-            }
-          );
+        await OrderNotification.updateOne(
+          { _id: notificationId },
+          {
+            $set: {
+              sent: true,
+              sentAt: new Date(),
+              lastError: "",
+              lockedUntil: null,
+            },
+          }
+        );
 
-          console.error(
-            "ORDER STATUS EMAIL ERROR:",
-            emailError.message
-          );
-        }
+        console.log("Order status email sent successfully.");
+      } catch (emailError) {
+        await OrderNotification.updateOne(
+          { _id: notificationId },
+          {
+            $set: {
+              lastError:
+                emailError.message || "Email sending failed.",
+              nextRetryAt: new Date(Date.now() + 5 * 60 * 1000),
+              lockedUntil: null,
+            },
+          }
+        );
+
+        console.error(
+          "ORDER STATUS EMAIL ERROR:",
+          emailError.message
+        );
       }
-    } else {
-      console.error(
-        `No customer email found for order ${order.orderNumber}.`
-      );
+    } catch (error) {
+      console.error("BACKGROUND EMAIL ERROR:", error);
     }
+  });
+} else {
+  console.error(
+    `No customer email found for order ${order.orderNumber}.`
+  );
+}
 
-    return res.status(200).json({
-      success: true,
-      message: "Order status updated successfully.",
-      statusEmailSent,
-      notificationQueued: Boolean(notificationId),
-      order,
-    });
+return res.status(200).json({
+  success: true,
+  message: "Order status updated successfully.",
+  notificationQueued: Boolean(notificationId),
+  order,
+});
   } catch (error) {
     console.error("UPDATE ORDER STATUS ERROR:", error);
 

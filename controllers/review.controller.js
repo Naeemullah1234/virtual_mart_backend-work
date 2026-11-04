@@ -71,6 +71,19 @@ if (!deliveredOrder) {
   );
 }
 
+const existingReview = await Review.findOne({
+  customer: req.user._id,
+  product: productId,
+  order: deliveredOrder._id,
+});
+
+if (existingReview) {
+  return sendError(
+    409,
+    "You have already reviewed this product for this order."
+  );
+}
+
     const review = await Review.create({
       customer: req.user._id,
       product: productId,
