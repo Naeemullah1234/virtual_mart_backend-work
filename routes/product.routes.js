@@ -5,8 +5,8 @@ const upload = require("../middleware/upload.middleware");
 const { createProduct, getAllProducts,getProductById, updateProduct, deleteProduct, getDeletedProducts,
 restoreProduct,} = require("../controllers/product.controller");
 
-router.post("/",protect,authorize("admin"), upload.array("images", 5),createProduct);
-router.put("/:id",protect,authorize("admin"),upload.array("images", 5),updateProduct);
+router.post("/",protect,authorize("admin"), upload.array("images", 7),createProduct);
+router.put("/:id",protect,authorize("admin"),upload.array("images", 7),updateProduct);
 router.get("/", getAllProducts);
 router.get("/deleted",protect,authorize("admin"),getDeletedProducts);
 router.put("/:id/restore",protect,authorize("admin"),restoreProduct);

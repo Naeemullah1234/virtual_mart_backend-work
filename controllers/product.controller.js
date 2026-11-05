@@ -8,8 +8,11 @@ const FabricType = require("../models/fabricType.model");
 const Brand = require("../models/brand.model");
 const Season = require("../models/season.model");
 const slugify = require("slugify");
+const cloudinary = require("../config/cloudinary");
+const Order = require("../models/order.model");
+const Review = require("../models/review.model");
 
-// Generate Unique Slug
+
 const generateUniqueSlug = async (name, productId = null) => {
   const baseSlug = slugify(name, { lower: true,strict: true,});
 
@@ -32,7 +35,6 @@ const generateUniqueSlug = async (name, productId = null) => {
 };
 
 
-// Create Product
 const createProduct = async (req, res) => {
 
   let session;
@@ -101,10 +103,13 @@ if (alreadyLinkedVariant) {
   });
 }
 
-
-
-      const images = (req.files || []).map((file, index) => ({
-  filename: file.filename,url: `/uploads/products/${file.filename}`,alt: name?.trim() || "",isPrimary: index === 0,}));
+const images = (req.files || []).map((file, index) => ({
+  filename: file.filename,
+  public_id: file.filename,
+  url: file.path,
+  alt: name?.trim() || "",
+  isPrimary: index === 0,
+}));
 
     // --------------------------------
 // Boolean Validation
@@ -182,10 +187,10 @@ if (!images || !Array.isArray(images) || images.length === 0) {
   });
 }
 
-if (images.length > 10) {
+if (images.length > 7) {
   return res.status(400).json({
     success: false,
-    message: "Maximum 10 images are allowed.",
+    message: "Maximum 7 images are allowed.",
   });
 }
 
@@ -797,7 +802,7 @@ const updateProduct = async (req, res) => {
 
     const { id } = req.params;
 
-    // Validate Product ID
+   
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({
         success: false,
@@ -814,9 +819,69 @@ const updateProduct = async (req, res) => {
       });
     }
 
-   const {name, category,productType,subCategory,fabricType, brand, season,description,images,featured,bestSeller, newArrival,isActive,} = req.body;
+const {name,category,productType,subCategory,fabricType,brand,season,description,images: imagesInput,
+  removedImages: removedImagesInput,featured,bestSeller,newArrival, isActive,} = req.body;
 
 let { variants } = req.body;
+
+let images = imagesInput;
+let removedImages = removedImagesInput || [];
+
+try {
+  if (typeof images === "string") {
+    images = JSON.parse(images);
+  }
+
+  if (typeof removedImages === "string") {
+    removedImages = JSON.parse(removedImages);
+  }
+} catch (error) {
+  return res.status(400).json({
+    success: false,
+    message: "Images data must be valid JSON.",
+  });
+}
+
+if (images !== undefined && !Array.isArray(images)) {
+  return res.status(400).json({
+    success: false,
+    message: "Images must be an array.",
+  });
+}
+
+if (!Array.isArray(removedImages)) {
+  return res.status(400).json({
+    success: false,
+    message: "Removed images must be an array.",
+  });
+}
+
+
+if (
+  !removedImages.every(
+    (publicId) => typeof publicId === "string" && publicId.trim()
+  )
+) {
+  return res.status(400).json({
+    success: false,
+    message: "Invalid removed image IDs.",
+  });
+}
+
+const existingPublicIds = new Set(
+  product.images.map((image) => image.public_id).filter(Boolean)
+);
+
+const invalidRemovedImage = removedImages.find(
+  (publicId) => !existingPublicIds.has(publicId)
+);
+
+if (invalidRemovedImage) {
+  return res.status(400).json({
+    success: false,
+    message: "One or more images do not belong to this product.",
+  });
+}
 
 let uniqueVariantIds;
 
@@ -1111,121 +1176,64 @@ if (name !== undefined) {
   product.description = description.trim();
 } 
 
-   if (images !== undefined) {
-
-  if (!Array.isArray(images) || images.length === 0) {
-    return res.status(400).json({
-      success: false,
-      message: "At least one product image is required.",
-    });
-  }
-
-  if (images.length > 10) {
-    return res.status(400).json({
-      success: false,
-      message: "Maximum 10 images are allowed.",
-    });
-  }
-
-  for (const image of images) {
-
-  if (!image || typeof image !== "object") {
-    return res.status(400).json({
-      success: false,
-      message: "Each product image must be a valid object.",
-    });
-  }
-
-  if (
-    typeof image.filename !== "string" ||
-    !image.filename.trim()
-  ) {
-    return res.status(400).json({
-      success: false,
-      message: "Image filename is required.",
-    });
-  }
-
-  if (
-    typeof image.url !== "string" ||
-    !image.url.trim()
-  ) {
-    return res.status(400).json({
-      success: false,
-      message: "Image URL is required.",
-    });
-  }
-
-  if (
-    image.alt !== undefined &&
-    typeof image.alt !== "string"
-  ) {
-    return res.status(400).json({
-      success: false,
-      message: "Image alt must be a string.",
-    });
-  }
-
-  if (
-    image.isPrimary !== undefined &&
-    typeof image.isPrimary !== "boolean"
-  ) {
-    return res.status(400).json({
-      success: false,
-      message: "Image isPrimary must be true or false.",
-    });
-  }
-}
-
-images.forEach((image) => {
-  image.filename = image.filename.trim();
-  image.url = image.url.trim();
-
-  if (image.alt !== undefined) {
-    image.alt = image.alt.trim();
-  }
-});
-
-  const primaryImages = images.filter((img) => img.isPrimary);
-
-  if (primaryImages.length > 1) {
-    return res.status(400).json({
-      success: false,
-      message: "Only one primary image is allowed.",
-    });
-  }
-
-  if (primaryImages.length === 0) {
-    images[0].isPrimary = true;
-  }
-  
-const productName = name ?? product.name;
-
-images.forEach((image) => {
-  if (!image.alt || image.alt.trim() === "") {
-    image.alt = productName;
-  }
-});
-
-
-// --------------------------------
-// Duplicate Image Validation
+     // --------------------------------
+// Product Image Management
 // --------------------------------
 
-const imageUrls = images.map((img) => img.url);
+// Keep existing images except selected removed images
+const retainedImages = product.images.filter(
+  (image) => !removedImages.includes(image.public_id)
+);
 
-const uniqueUrls = [...new Set(imageUrls)];
+// Add newly uploaded Cloudinary images
+const newImages = (req.files || []).map((file) => ({
+  filename: file.filename,
+  public_id: file.filename,
+  url: file.path,
+  alt: name?.trim() || product.name,
+  isPrimary: false,
+}));
 
-if (imageUrls.length !== uniqueUrls.length) {
+// Combine old and new images
+const finalImages = [
+  ...retainedImages.map((image) => image.toObject()),
+  ...newImages,
+];
+
+// Maximum 7 images
+if (finalImages.length > 7) {
   return res.status(400).json({
     success: false,
-    message: "Duplicate product images are not allowed.",
+    message: "Maximum 7 product images are allowed.",
   });
 }
 
-
-  product.images = images;
+// At least one image required
+if (finalImages.length === 0) {
+  return res.status(400).json({
+    success: false,
+    message: "At least one product image is required.",
+  });
 }
+
+// Ensure only one primary image
+const primaryImages = finalImages.filter(
+  (image) => image.isPrimary
+);
+
+if (primaryImages.length > 1) {
+  return res.status(400).json({
+    success: false,
+    message: "Only one primary image is allowed.",
+  });
+}
+
+// Automatically set first image as primary if none exists
+if (primaryImages.length === 0) {
+  finalImages[0].isPrimary = true;
+}
+
+product.images = finalImages;
 
  // --------------------------------
 // Boolean Validation
@@ -1310,6 +1318,32 @@ if (variants !== undefined) {
 
     await session.commitTransaction();
     session.endSession();
+
+    // Delete removed images from Cloudinary after successful DB update
+if (removedImages.length > 0) {
+  setImmediate(async () => {
+    const results = await Promise.allSettled(
+      removedImages.map((publicId) =>
+        cloudinary.uploader.destroy(publicId, {
+          resource_type: "image",
+        })
+      )
+    );
+
+    results.forEach((result, index) => {
+      if (
+        result.status === "rejected" ||
+        result.value?.result !== "ok"
+      ) {
+        console.error(
+          "Cloudinary image deletion failed:",
+          removedImages[index],
+          result.status === "rejected" ? result.reason : result.value
+        );
+      }
+    });
+  });
+}
 
     const updatedProduct = await Product.findById(product._id)
       .populate("category", "name slug")

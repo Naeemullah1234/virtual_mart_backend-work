@@ -76,6 +76,12 @@ totalReviews: {
       trim: true,
     },
 
+    public_id: {
+  type: String,
+  required: true,
+  trim: true,
+},
+
     url: {
       type: String,
       required: true,
