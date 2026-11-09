@@ -102,17 +102,10 @@ if (new Set(attributeKeys).size !== attributeKeys.length) {
 
 
 
-const formattedImages = (req.files || []).map((file, index) => ({
-  filename: file.filename,
-  url: `/uploads/products/${file.filename}`,
-  alt: "",
-  isPrimary: index === 0,
-}));
 
 
 
-
-const variant = await ProductVariant.create({ sku: normalizedSKU,attributes: normalizedAttributes,price,salePrice,stock,images: formattedImages });
+const variant = await ProductVariant.create({ sku: normalizedSKU,attributes: normalizedAttributes,price,salePrice,stock});
 
 res.status(201).json({success: true,message: "Product variant created successfully.",variant,});
 
@@ -393,19 +386,6 @@ if (salePrice !== undefined) {
 if (stock !== undefined) {
   variant.stock = newStock;
 }
-
-if (req.files && req.files.length > 0) {
-
-  const formattedImages = req.files.map((file, index) => ({
-    filename: file.filename,
-    url: `/uploads/products/${file.filename}`,
-    alt: "",
-    isPrimary: index === 0,
-  }));
-
-  variant.images = formattedImages;
-}
-
 
 await variant.save();
 

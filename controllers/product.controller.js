@@ -1401,9 +1401,9 @@ if (removedImages.length > 0) {
 };
 
 // Soft Delete Product
-const deleteProduct = async (req, res) => {
 
-   let session;
+const deleteProduct = async (req, res) => {
+  let session;
 
   try {
     const { id } = req.params;
@@ -1429,40 +1429,92 @@ const deleteProduct = async (req, res) => {
       });
     }
 
+    // Check order and review history
+    const [hasOrders, hasReviews] = await Promise.all([
+      Order.exists({
+        "items.product": id,
+      }),
+      Review.exists({
+        product: id,
+      }),
+    ]);
+
+    const hasHistory = Boolean(hasOrders || hasReviews);
+
+    // Start transaction
     session = await mongoose.startSession();
-     session.startTransaction();
+    session.startTransaction();
 
-    // Soft Delete
-    product.isDeleted = true;
+    // Unlink all variants
+    await ProductVariant.updateMany(
+      {
+        product: product._id,
+      },
+      {
+        $set: {
+          product: null,
+        },
+      },
+      { session }
+    );
 
-    // Also hide it from customers
-    product.isActive = false;
+    if (hasHistory) {
+      // Soft Delete: preserve historical product record
+      product.isDeleted = true;
+      product.isActive = false;
 
-    // Unlink all variants from this product
-await ProductVariant.updateMany(
-  {
-    product: product._id,
-  },
-  {
-    $set: {
-      product: null,
-    },
-  },
-  { session }
-);
-
-    await product.save({ session });
+      await product.save({ session });
+    } else {
+      // Permanent Delete: no order or review history
+      await product.deleteOne({ session });
+    }
 
     await session.commitTransaction();
     session.endSession();
+    session = null;
 
-    res.status(200).json({
+    // Delete Cloudinary images only after permanent deletion
+    if (!hasHistory && product.images?.length > 0) {
+      const publicIds = product.images
+        .map((image) => image.public_id)
+        .filter(Boolean);
+
+      setImmediate(async () => {
+        const results = await Promise.allSettled(
+          publicIds.map((publicId) =>
+            cloudinary.uploader.destroy(publicId, {
+              resource_type: "image",
+            })
+          )
+        );
+
+        results.forEach((result, index) => {
+          if (
+            result.status === "rejected" ||
+            !["ok", "not found"].includes(result.value?.result)
+          ) {
+            console.error(
+              "Cloudinary image deletion failed:",
+              publicIds[index],
+              result.status === "rejected"
+                ? result.reason
+                : result.value
+            );
+          }
+        });
+      });
+    }
+
+    return res.status(200).json({
       success: true,
-      message: "Product deleted successfully.",
+      message: hasHistory
+        ? "Product soft deleted successfully because order or review history exists."
+        : "Product permanently deleted successfully.",
+      deleteType: hasHistory ? "soft" : "permanent",
     });
 
   } catch (error) {
-    console.log(error);
+    console.error("Delete Product Error:", error);
 
     if (session?.inTransaction()) {
       await session.abortTransaction();
@@ -1472,7 +1524,7 @@ await ProductVariant.updateMany(
       session.endSession();
     }
 
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: "Server Error",
     });

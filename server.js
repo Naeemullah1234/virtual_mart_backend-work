@@ -25,22 +25,26 @@ app.use("/api/admins", adminRoutes);
 app.use("/api", routes);
 
 app.use((err, req, res, next) => {
-  if (err.name === "MulterError") {
-    return res.status(400).json({
-      success: false,
-      message: err.message,
-    });
+  console.error("GLOBAL API ERROR:", err);
+
+  if (res.headersSent) {
+    return next(err);
   }
 
-  if (err.message === "Only JPG, JPEG, PNG and WEBP images are allowed.") {
-    return res.status(400).json({
-      success: false,
-      message: err.message,
-    });
-  }
+  const message =
+    typeof err.message === "string"
+      ? err.message
+      : "Something went wrong.";
 
-  next(err);
+  const statusCode =
+    err.name === "MulterError" ? 400 : err.statusCode || 500;
+
+  return res.status(statusCode).json({
+    success: false,
+    message,
+  });
 });
+
 
 
 app.use((req, res) => {

@@ -87,37 +87,7 @@ attributes: [
       min: 0,
     },
 
-    // --------------------------------
-    // Variant Images
-    // --------------------------------
-
-   images: [
-  {
-    filename: {
-      type: String,
-      trim: true,
-      required: true,
-    },
-
-    url: {
-      type: String,
-      trim: true,
-      required: true,
-    },
-
-    alt: {
-      type: String,
-      default: "",
-      trim: true,
-    },
-
-    isPrimary: {
-      type: Boolean,
-      default: false,
-    },
-  },
-],
-
+    
   },
   {
     timestamps: true,
