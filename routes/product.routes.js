@@ -1,34 +1,72 @@
+
 const express = require("express");
-const { protect, authorize } = require("../middleware/auth.middleware");
 const router = express.Router();
-const upload = require("../middleware/upload.middleware");
-const { createProduct, getAllProducts,getProductById, updateProduct, deleteProduct, getDeletedProducts,
-restoreProduct,} = require("../controllers/product.controller");
 
-const productImageUpload = (req, res, next) => {
-  const startTime = performance.now();
+const {
+  protect,
+  authorize,
+} = require("../middleware/auth.middleware");
 
-  upload.array("images", 7)(req, res, (err) => {
-    const duration = (performance.now() - startTime).toFixed(2);
+const {
+  productUpload,
+} = require("../middleware/imageUpload");
 
-    console.log(`Product Cloudinary Upload: ${duration} ms`);
+const {
+  createProduct,
+  getAllProducts,
+  getProductById,
+  updateProduct,
+  deleteProduct,
+  getDeletedProducts,
+  restoreProduct,
+} = require("../controllers/product.controller");
 
-    if (err) {
-      return next(err);
-    }
+// Create product
+router.post(
+  "/",
+  protect,
+  authorize("admin"),
+  productUpload,
+  createProduct
+);
 
-    next();
-  });
-};
+// Update product
+router.put(
+  "/:id",
+  protect,
+  authorize("admin"),
+  productUpload,
+  updateProduct
+);
 
-router.post("/",protect,authorize("admin"),productImageUpload,createProduct);
-router.put("/:id",protect,authorize("admin"),productImageUpload,updateProduct);
+// Get all active products (Public)
 router.get("/", getAllProducts);
-router.get("/deleted",protect,authorize("admin"),getDeletedProducts);
-router.put("/:id/restore",protect,authorize("admin"),restoreProduct);
-router.get("/:id", getProductById);
-router.delete("/:id",protect,authorize("admin"),deleteProduct);
 
- 
+// Get deleted products (Admin)
+router.get(
+  "/deleted",
+  protect,
+  authorize("admin"),
+  getDeletedProducts
+);
+
+// Restore deleted product (Admin)
+router.put(
+  "/:id/restore",
+  protect,
+  authorize("admin"),
+  restoreProduct
+);
+
+// Get single product (Public)
+router.get("/:id", getProductById);
+
+// Delete product (Admin)
+router.delete(
+  "/:id",
+  protect,
+  authorize("admin"),
+  deleteProduct
+);
 
 module.exports = router;
