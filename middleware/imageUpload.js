@@ -84,7 +84,13 @@ const reviewUpload = createImageUpload(
   MAX_REVIEW_IMAGES
 );
 
+const productVariantUpload = createImageUpload(
+  "virtual-mart/product-variants",
+  1
+);
+
 module.exports = {
   productUpload,
   reviewUpload,
+  productVariantUpload,
 };

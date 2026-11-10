@@ -982,10 +982,12 @@ const amountSaved = bestDiscountedVariant
   ? bestDiscountedVariant.price - bestDiscountedVariant.salePrice
   : 0;
 
-      const thumbnail =
-        product.images?.find((image) => image.isPrimary) ||
-        product.images?.[0] ||
-        null;
+      // Primary image always first
+     product.images?.sort(
+       (a, b) => Number(b.isPrimary) - Number(a.isPrimary)
+         );
+
+         const thumbnail = product.images?.[0] || null;
 
       const inStock = totalStock > 0;
 
@@ -1061,7 +1063,7 @@ const getProductById = async (req, res) => {
       .populate("fabricType", "name slug")
       .populate("brand", "name slug")
       .populate("season", "name slug")
-      .populate( "variants", "sku attributes price salePrice stock images");
+      .populate("variants", "sku attributes price salePrice stock image");
 
     if (!product) {
       return res.status(404).json({
@@ -1069,50 +1071,88 @@ const getProductById = async (req, res) => {
         message: "Product not found.",
       });
     }
+   
+    const productObject = product.toObject();
 
-const productObject = product.toObject();
+// Primary image always first
+productObject.images?.sort(
+  (a, b) => Number(b.isPrimary) - Number(a.isPrimary)
+);
 
-const thumbnail =
-  productObject.images.find((img) => img.isPrimary) ||
-  productObject.images[0] ||
-  null;
+const thumbnail = productObject.images?.[0] || null;
 
-    const productVariants = productObject.variants || [];
+const productVariants = productObject.variants || [];
 
-const prices = productVariants
+const effectivePrices = productVariants
   .map((variant) => variant.salePrice ?? variant.price)
-  .filter((price) => typeof price === "number");
-
-const originalPrices = productVariants
-  .map((variant) => variant.price)
-  .filter((price) => typeof price === "number");
+  .filter(
+    (price) =>
+      typeof price === "number" && Number.isFinite(price)
+  );
 
 const totalStock = productVariants.reduce(
-  (total, variant) => total + (variant.stock || 0),
+  (total, variant) =>
+    total +
+    (Number.isFinite(variant.stock) ? variant.stock : 0),
   0
 );
 
-const lowestPrice = prices.length ? Math.min(...prices) : 0;
-const highestPrice = prices.length ? Math.max(...prices) : 0;
+const lowestPrice = effectivePrices.length
+  ? Math.min(...effectivePrices)
+  : 0;
 
-const lowestOriginalPrice = originalPrices.length ? Math.min(...originalPrices) : 0;
+const highestPrice = effectivePrices.length
+  ? Math.max(...effectivePrices)
+  : 0;
 
-const isOnSale = productVariants.some(
+const discountedVariants = productVariants.filter(
   (variant) =>
-    variant.salePrice !== null &&
+    typeof variant.price === "number" &&
+    Number.isFinite(variant.price) &&
+    variant.price > 0 &&
+    typeof variant.salePrice === "number" &&
+    Number.isFinite(variant.salePrice) &&
+    variant.salePrice >= 0 &&
     variant.salePrice < variant.price
 );
 
-const discountPercentage =
-  lowestOriginalPrice > 0 && lowestPrice < lowestOriginalPrice
-    ? Math.round( ((lowestOriginalPrice - lowestPrice) / lowestOriginalPrice) * 100 ) : 0;
+const bestDiscountedVariant = discountedVariants.reduce(
+  (best, variant) => {
+    if (!best) return variant;
 
-const amountSaved =
-  isOnSale && lowestOriginalPrice > lowestPrice ? lowestOriginalPrice - lowestPrice : 0;
+    const currentDiscount =
+      ((variant.price - variant.salePrice) / variant.price) * 100;
+
+    const bestDiscount =
+      ((best.price - best.salePrice) / best.price) * 100;
+
+    return currentDiscount > bestDiscount ? variant : best;
+  },
+  null
+);
+
+const isOnSale = Boolean(bestDiscountedVariant);
+
+const discountPercentage = bestDiscountedVariant
+  ? Math.round(
+      ((bestDiscountedVariant.price - bestDiscountedVariant.salePrice) /
+        bestDiscountedVariant.price) *
+        100
+    )
+  : 0;
+
+const amountSaved = bestDiscountedVariant
+  ? bestDiscountedVariant.price - bestDiscountedVariant.salePrice
+  : 0;
 
 const inStock = totalStock > 0;
 
-const stockStatus =totalStock === 0 ? "Out of Stock": totalStock <= 5? "Low Stock": "In Stock";
+const stockStatus =
+  totalStock === 0
+    ? "Out of Stock"
+    : totalStock <= 5
+      ? "Low Stock"
+      : "In Stock";
 
 res.status(200).json({
   success: true,
@@ -1154,33 +1194,22 @@ const updateProduct = async (req, res) => {
       });
     }
 
-const {name,category,productType,subCategory,fabricType,brand,season,description,images: imagesInput,
-  removedImages: removedImagesInput,featured,bestSeller,newArrival, isActive,} = req.body;
+const {name,category,productType,subCategory,fabricType,brand,season,description,
+  removedImages: removedImagesInput,featured,primaryImage,bestSeller,newArrival, isActive,} = req.body;
 
 let { variants } = req.body;
 
-let images = imagesInput;
+
 let removedImages = removedImagesInput || [];
 
 try {
-  if (typeof images === "string") {
-    images = JSON.parse(images);
-  }
-
   if (typeof removedImages === "string") {
     removedImages = JSON.parse(removedImages);
   }
 } catch (error) {
   return res.status(400).json({
     success: false,
-    message: "Images data must be valid JSON.",
-  });
-}
-
-if (images !== undefined && !Array.isArray(images)) {
-  return res.status(400).json({
-    success: false,
-    message: "Images must be an array.",
+    message: "Removed images data must be valid JSON.",
   });
 }
 
@@ -1269,8 +1298,13 @@ if (existingVariants.length !== uniqueVariantIds.length) {
   });
 }
 
-const alreadyLinkedVariant = await ProductVariant.findOne({_id: { $in: uniqueVariantIds },
-  product: { $nin: [null, product._id],},}).select("_id product");
+const alreadyLinkedVariant = await ProductVariant.findOne({
+  _id: { $in: uniqueVariantIds },
+  product: {
+    $exists: true,
+    $nin: [null, product._id],
+  },
+}).select("_id product");
 
 if (alreadyLinkedVariant) {
   return res.status(400).json({
@@ -1292,7 +1326,7 @@ const newCategory = category !== undefined ? category : product.category;
 const newSubCategory = subCategory !== undefined ? subCategory : product.subCategory;
 
 // Validate Category if changed
-if (category) {
+if (category !== undefined) {
   if (!mongoose.Types.ObjectId.isValid(category)) {
     return res.status(400).json({
       success: false,
@@ -1311,7 +1345,7 @@ if (category) {
 }
 
 // Validate Sub Category
-if (subCategory) {
+if (subCategory !== undefined) {
   if (!mongoose.Types.ObjectId.isValid(subCategory)) {
     return res.status(400).json({
       success: false,
@@ -1535,11 +1569,33 @@ const finalImages = [
   ...newImages,
 ];
 
-// Maximum 7 images
-if (finalImages.length > 7) {
+   
+// Validate selected primary image
+if (primaryImage !== undefined) {
+  if (
+    typeof primaryImage !== "string" ||
+    !primaryImage.trim() ||
+    !finalImages.some(
+      (image) => image.public_id === primaryImage.trim()
+    )
+  ) {
+    return res.status(400).json({
+      success: false,
+      message: "Selected primary image is invalid.",
+    });
+  }
+
+  // Set selected image as the only primary image
+  finalImages.forEach((image) => {
+    image.isPrimary = image.public_id === primaryImage.trim();
+  });
+}
+   
+
+if (finalImages.length > MAX_PRODUCT_IMAGES) {
   return res.status(400).json({
     success: false,
-    message: "Maximum 7 product images are allowed.",
+    message: `Maximum ${MAX_PRODUCT_IMAGES} product images are allowed.`,
   });
 }
 
@@ -1568,11 +1624,15 @@ if (primaryImages.length === 0) {
   finalImages[0].isPrimary = true;
 }
 
+// Keep primary image at first position
+finalImages.sort(
+  (a, b) => Number(b.isPrimary) - Number(a.isPrimary)
+);
+
 product.images = finalImages;
 
- // --------------------------------
-// Boolean Validation
-// --------------------------------
+
+// Boolean Validation & Conversion
 
 const booleanFields = {
   featured,
@@ -1581,8 +1641,16 @@ const booleanFields = {
   isActive,
 };
 
+const parsedBooleanFields = {};
+
 for (const [field, value] of Object.entries(booleanFields)) {
-  if (value !== undefined && typeof value !== "boolean") {
+  if (value === undefined) continue;
+
+  if (value === true || value === "true") {
+    parsedBooleanFields[field] = true;
+  } else if (value === false || value === "false") {
+    parsedBooleanFields[field] = false;
+  } else {
     return res.status(400).json({
       success: false,
       message: `${field} must be true or false.`,
@@ -1590,25 +1658,24 @@ for (const [field, value] of Object.entries(booleanFields)) {
   }
 }
 
-// --------------------------------
 // Update Boolean Fields
-// --------------------------------
 
-if (featured !== undefined) {
-  product.featured = featured;
+if (parsedBooleanFields.featured !== undefined) {
+  product.featured = parsedBooleanFields.featured;
 }
 
-if (bestSeller !== undefined) {
-  product.bestSeller = bestSeller;
+if (parsedBooleanFields.bestSeller !== undefined) {
+  product.bestSeller = parsedBooleanFields.bestSeller;
 }
 
-if (newArrival !== undefined) {
-  product.newArrival = newArrival;
+if (parsedBooleanFields.newArrival !== undefined) {
+  product.newArrival = parsedBooleanFields.newArrival;
 }
 
-if (isActive !== undefined) {
-  product.isActive = isActive;
+if (parsedBooleanFields.isActive !== undefined) {
+  product.isActive = parsedBooleanFields.isActive;
 }
+
 
 session = await mongoose.startSession();
 session.startTransaction();
@@ -1687,7 +1754,7 @@ if (removedImages.length > 0) {
       .populate("fabricType", "name slug")
       .populate("brand", "name slug")
       .populate("season", "name slug")
-      .populate("variants","sku attributes price salePrice stock images");
+      .populate("variants","sku attributes price salePrice stock");
 
 
     res.status(200).json({
@@ -1878,6 +1945,7 @@ const getDeletedProducts = async (req, res) => {
       .populate("fabricType", "name slug")
       .populate("brand", "name slug")
       .populate("season", "name slug")
+      .populate("variants", "sku attributes price salePrice stock image")
       .sort({ updatedAt: -1 });
 
     res.status(200).json({
@@ -1930,9 +1998,11 @@ const restoreProduct = async (req, res) => {
   ? product.variants
   : [];
 
-  const existingVariants = await ProductVariant.find({
+const existingVariants = await ProductVariant.find({
   _id: { $in: variantIds },
-}).select("_id product");
+})
+  .select("_id product")
+  .session(session);
 
 if (existingVariants.length !== variantIds.length) {
   await session.abortTransaction();
@@ -1979,17 +2049,6 @@ await ProductVariant.updateMany(
 );
 
 
-
-if (variantIds.length === 0) {
-  await session.abortTransaction();
-  session.endSession();
-
-  return res.status(400).json({
-    success: false,
-    message: "Product has no variants to restore.",
-  });
-}
-
     product.isDeleted = false;
     product.isActive = true;
 
@@ -2005,7 +2064,7 @@ if (variantIds.length === 0) {
       .populate("fabricType", "name slug")
       .populate("brand", "name slug")
       .populate("season", "name slug")
-       .populate("variants","sku attributes price salePrice stock images");
+       .populate("variants", "sku attributes price salePrice stock image");
 
     res.status(200).json({
       success: true,

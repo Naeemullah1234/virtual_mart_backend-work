@@ -87,6 +87,16 @@ attributes: [
       min: 0,
     },
 
+image: {
+  type: {
+    filename: { type: String, trim: true },
+    public_id: { type: String, trim: true },
+    url: { type: String, trim: true },
+    alt: { type: String, trim: true, default: "" },
+  },
+  default: undefined,
+},
+
     
   },
   {

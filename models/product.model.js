@@ -67,39 +67,26 @@ totalReviews: {
 },
 
 
-
-    images: [
-  {
-    filename: {
-      type: String,
-      required: true,
-      trim: true,
+  images: {
+  type: [{
+    filename: { type: String, required: true, trim: true },
+    public_id: { type: String, required: true, trim: true },
+    url: { type: String, required: true, trim: true },
+    alt: { type: String, default: "", trim: true },
+    isPrimary: { type: Boolean, default: false }
+  }],
+  validate: {
+    validator: function(images) {
+      return (
+        images.length >= 1 &&
+        images.length <= 5 &&
+        images.filter(image => image.isPrimary).length === 1
+      );
     },
-
-    public_id: {
-  type: String,
-  required: true,
-  trim: true,
+    message: "Product must have 1 to 5 images and exactly one primary image."
+  }
 },
-
-    url: {
-      type: String,
-      required: true,
-      trim: true,
-    },
-
-    alt: {
-      type: String,
-      default: "",
-      trim: true,
-    },
-
-    isPrimary: {
-      type: Boolean,
-      default: false,
-    },
-  },
-],
+   
 
 
     variants: [
@@ -146,6 +133,13 @@ totalReviews: {
     timestamps: true,
   }
 );
+
+
+productSchema.methods.getSortedImages = function () {
+  return [...this.images].sort(
+    (a, b) => Number(b.isPrimary) - Number(a.isPrimary)
+  );
+};
 
 
 

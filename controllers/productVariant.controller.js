@@ -3,6 +3,25 @@ const ProductVariant = require("../models/productVariant.model");
 const { validateSKU,validatePrice,validateSalePrice,validateStock,
   validateAttributes,normalizeAttributes,validateImages} = require("../validators/productVariant.validator");
 const mongoose = require("mongoose");
+const cloudinary = require("../config/cloudinary");
+
+
+
+
+
+
+
+const cleanupUploadedImages = async (files = []) => {
+  await Promise.all(
+    files.map(async (file) => {
+      if (file.filename) {
+        try {
+          await cloudinary.uploader.destroy(file.filename, {
+            resource_type: "image",
+          });
+        } catch (error) {
+          console.log("Uploaded image cleanup failed:", error);
+        }}}));};
 
 
 
@@ -31,10 +50,6 @@ const salePrice =
     ? null
     : Number(salePriceValue);
 const stock = Number(stockValue);
-
-
-
-
 
 const skuError = validateSKU(sku);
 
@@ -85,6 +100,18 @@ if (attributesError) {
 
 const normalizedAttributes = normalizeAttributes(attributes);
 
+// Optional Variant Image
+const uploadedFile = req.files?.[0];
+
+const image = uploadedFile
+  ? {
+      filename: uploadedFile.filename,
+      public_id: uploadedFile.filename,
+      url: uploadedFile.path,
+      alt: normalizedSKU,
+    }
+  : undefined;
+
 // --------------------------------
 // Duplicate Attribute Keys
 // --------------------------------
@@ -100,16 +127,20 @@ if (new Set(attributeKeys).size !== attributeKeys.length) {
   });
 }
 
-
-
-
-
-
-const variant = await ProductVariant.create({ sku: normalizedSKU,attributes: normalizedAttributes,price,salePrice,stock});
+const variant = await ProductVariant.create({
+  sku: normalizedSKU,
+  attributes: normalizedAttributes,
+  price,
+  salePrice,
+  stock,
+  ...(image && { image }),
+});
 
 res.status(201).json({success: true,message: "Product variant created successfully.",variant,});
 
  } catch (error) {
+
+  await cleanupUploadedImages(req.files || []);
 
   console.log(error);
 
@@ -198,6 +229,8 @@ const updateProductVariant = async (req, res) => {
 // --------------------------------
 
 if (!mongoose.Types.ObjectId.isValid(variantId)) {
+  await cleanupUploadedImages(req.files || []);
+
   return res.status(400).json({
     success: false,
     message: "Invalid Variant ID.",
@@ -213,6 +246,8 @@ const variant = await ProductVariant.findOne({
 });
 
 if (!variant) {
+
+   await cleanupUploadedImages(req.files || []);
   return res.status(404).json({
     success: false,
     message: "Product variant not found.",
@@ -223,8 +258,25 @@ const {
   sku,
   price,
   salePrice,
-  stock
+  stock,
+   removeImage
 } = req.body;
+
+// Validate removeImage
+let shouldRemoveImage = false;
+
+if (removeImage !== undefined) {
+  if (removeImage === true || removeImage === "true") {
+    shouldRemoveImage = true;
+  } else if (removeImage !== false && removeImage !== "false") {
+     await cleanupUploadedImages(req.files || []);
+
+    return res.status(400).json({
+      success: false,
+      message: "removeImage must be true or false.",
+    });
+  }
+}
 
 let attributes;
 
@@ -234,6 +286,8 @@ if (req.body.attributes !== undefined) {
     attributes = JSON.parse(req.body.attributes);
    
   } catch (error) {
+     await cleanupUploadedImages(req.files || []);
+
     return res.status(400).json({
       success: false,
       message: "Attributes must be a valid JSON array.",
@@ -246,6 +300,8 @@ if (sku !== undefined) {
   const skuError = validateSKU(sku);
 
   if (skuError) {
+     await cleanupUploadedImages(req.files || []);
+
     return res.status(400).json({
       success: false,
       message: skuError,
@@ -277,6 +333,8 @@ const newSalePrice =
 const priceError = validatePrice(newPrice);
 
 if (priceError) {
+   await cleanupUploadedImages(req.files || []);
+
   return res.status(400).json({
     success: false,
     message: priceError,
@@ -293,6 +351,8 @@ const salePriceError = validateSalePrice(
 );
 
 if (salePriceError) {
+   await cleanupUploadedImages(req.files || []);
+
   return res.status(400).json({
     success: false,
     message: salePriceError,
@@ -307,6 +367,8 @@ if (stock !== undefined) {
   const stockError = validateStock(newStock);
 
   if (stockError) {
+     await cleanupUploadedImages(req.files || []);
+
     return res.status(400).json({
       success: false,
       message: stockError,
@@ -322,6 +384,8 @@ if (attributes !== undefined) {
   const attributesError = validateAttributes(attributes);
 
   if (attributesError) {
+     await cleanupUploadedImages(req.files || []);
+
     return res.status(400).json({
       success: false,
       message: attributesError,
@@ -336,6 +400,8 @@ if (attributes !== undefined) {
   );
 
   if (new Set(attributeKeys).size !== attributeKeys.length) {
+     await cleanupUploadedImages(req.files || []);
+
     return res.status(400).json({
       success: false,
       message: "Duplicate attribute keys are not allowed.",
@@ -356,11 +422,36 @@ if (normalizedSKU !== undefined) {
   });
 
   if (existingSKU) {
+     await cleanupUploadedImages(req.files || []);
+
     return res.status(400).json({
       success: false,
       message: "SKU already exists.",
     });
   }
+}
+
+// Handle Variant Image
+const uploadedFile = req.files?.[0];
+const oldImagePublicId = variant.image?.public_id;
+if (shouldRemoveImage && uploadedFile) {
+  await cleanupUploadedImages(req.files || []);
+
+  return res.status(400).json({
+    success: false,
+    message: "Cannot upload and remove variant image at the same time.",
+  });
+}
+
+if (uploadedFile) {
+  variant.image = {
+    filename: uploadedFile.filename,
+    public_id: uploadedFile.filename,
+    url: uploadedFile.path,
+    alt: normalizedSKU || variant.sku,
+  };
+} else if (shouldRemoveImage) {
+  variant.image = undefined;
 }
 
 // --------------------------------
@@ -389,6 +480,17 @@ if (stock !== undefined) {
 
 await variant.save();
 
+// Delete old image from Cloudinary after successful update
+if (oldImagePublicId && (uploadedFile || shouldRemoveImage)) {
+  try {
+    await cloudinary.uploader.destroy(oldImagePublicId, {
+      resource_type: "image",
+    });
+  } catch (error) {
+    console.log("Old variant image deletion failed:", error);
+  }
+}
+
 
 
 res.status(200).json({
@@ -399,6 +501,8 @@ res.status(200).json({
 
 
 } catch (error) {
+
+   await cleanupUploadedImages(req.files || []);
 
   console.log(error);
 
@@ -473,9 +577,22 @@ if (variant.product) {
   );
 }
 
+const imagePublicId = variant.image?.public_id;
+
 await ProductVariant.deleteOne({
   _id: variantId,
 });
+
+// Delete Variant Image from Cloudinary
+if (imagePublicId) {
+  try {
+    await cloudinary.uploader.destroy(imagePublicId, {
+      resource_type: "image",
+    });
+  } catch (error) {
+    console.log("Variant image deletion failed:", error);
+  }
+}
 
     // --------------------------------
     // Response
@@ -731,77 +848,6 @@ if (!allowedStockStatuses.includes(stockStatus)) {
   }
 };
 
-// const getProductVariantFilters = async (req, res) => {
-//   try {
-
-//     const filters = await ProductVariant.aggregate([
-//       {
-//         $match: {
-//           isDeleted: false,
-//           isActive: true,
-//         },
-//       },
-
-//       {
-//         $unwind: "$attributes",
-//       },
-
-//       {
-//         $group: {
-//           _id: {
-//             key: "$attributes.key",
-//             value: "$attributes.value",
-//           },
-//           count: {
-//             $sum: 1,
-//           },
-//         },
-//       },
-
-//       {
-//         $sort: {
-//           "_id.key": 1,
-//           "_id.value": 1,
-//         },
-//       },
-
-//     ]);
-
-//     const result = {};
-
-//     filters.forEach((item) => {
-
-//       const key = item._id.key;
-//       const value = item._id.value;
-
-//       if (!result[key]) {
-//         result[key] = [];
-//       }
-
-//       result[key].push({
-//         value,
-//         count: item.count,
-//       });
-
-//     });
-
-//     return res.status(200).json({
-//       success: true,
-//       filters: result,
-//     });
-
-//   } catch (error) {
-
-//     console.log(error);
-
-//     return res.status(500).json({
-//       success: false,
-//       message: "Server Error",
-//     });
-
-//   }
-// };
-
 const getProductVariantFilters = async (req, res) => {
   try {
 
@@ -983,16 +1029,13 @@ const getProductVariantById = async (req, res) => {
       select: "name slug ",
     });
 
-    // --------------------------------
-    // Variant Not Found
-    // --------------------------------
+    if (!variant) {
+  return res.status(404).json({
+    success: false,
+    message: "Product variant not found.",
+  });
+}
 
-    // if (!variant.product) {
-    //   return res.status(404).json({
-    //     success: false,
-    //     message: "Product variant not found.",
-    //   });
-    // }
 
     // --------------------------------
 // Parent Product Validation
