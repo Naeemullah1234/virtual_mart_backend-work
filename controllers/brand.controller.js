@@ -1,4 +1,5 @@
 const Brand = require("../models/brand.model");
+const Product = require("../models/product.model");
 const mongoose = require("mongoose");
 
 
@@ -15,7 +16,7 @@ const createBrand = async (req, res) => {
 
 const normalizedName = name.trim();
 
-   const escapedName = normalizedName.replace(
+  const escapedName = normalizedName.replace(
   /[.*+?^${}()|[\]\\]/g,
   "\\$&"
 );
@@ -93,9 +94,13 @@ const getBrandById = async (req, res) => {
       });
     }
 
-    const brand = await Brand.findById(req.params.id);
+    const brand = await Brand.findOne({
+  _id: req.params.id,
+  isActive: true,
+  isDeleted: false,
+});
 
-    if (!brand || brand.isDeleted) {
+    if (!brand) {
       return res.status(404).json({
         success: false,
         message: "Brand not found.",
@@ -128,9 +133,12 @@ const updateBrand = async (req, res) => {
       });
     }
 
-    const { name, displayOrder, logo, isActive } = req.body;
+    const { name, displayOrder, isActive } = req.body;
 
-    const brand = await Brand.findById(req.params.id);
+    const brand = await Brand.findOne({
+  _id: req.params.id,
+  isDeleted: false,
+});
 
     if (!brand || brand.isDeleted) {
       return res.status(404).json({
@@ -139,24 +147,43 @@ const updateBrand = async (req, res) => {
       });
     }
 
+
+        if (
+  name !== undefined &&
+  (typeof name !== "string" || !name.trim())
+) {
+  return res.status(400).json({
+    success: false,
+    message: "Brand name cannot be empty.",
+  });
+}
+
     // Duplicate Name Check
-    if (name && name !== brand.name) {
-      const existing = await Brand.findOne({
-        name,
-        isDeleted: false,
-      });
+       if (name !== undefined) {
+  const normalizedName = name.trim();
 
-      if (existing) {
-        return res.status(400).json({
-          success: false,
-          message: "Brand already exists.",
-        });
-      }
+  const escapedName = normalizedName.replace(
+    /[.*+?^${}()|[\]\\]/g,
+    "\\$&"
+  );
 
-      brand.name = name;
-    }
+  const existingBrand = await Brand.findOne({
+    name: { $regex: `^${escapedName}$`, $options: "i" },
+    _id: { $ne: brand._id },
+    isDeleted: false,
+  });
 
-    brand.logo = logo ?? brand.logo;
+  if (existingBrand) {
+    return res.status(400).json({
+      success: false,
+      message: "Brand already exists.",
+    });
+  }
+
+  brand.name = normalizedName;
+}
+
+    
     brand.displayOrder = displayOrder ?? brand.displayOrder;
 
     if (typeof isActive === "boolean") {
@@ -182,6 +209,8 @@ const updateBrand = async (req, res) => {
 
   }
 };
+
+
 const deleteBrand = async (req, res) => {
   try {
 
@@ -192,16 +221,32 @@ const deleteBrand = async (req, res) => {
       });
     }
 
-    const brand = await Brand.findById(req.params.id);
+    const brand = await Brand.findOne({
+  _id: req.params.id,
+  isDeleted: false,
+});
 
-    if (!brand || brand.isDeleted) {
+    if (!brand) {
       return res.status(404).json({
         success: false,
         message: "Brand not found.",
       });
     }
 
+    const existingProducts = await Product.exists({
+  brand: brand._id,
+  isDeleted: false,
+});
+
+if (existingProducts) {
+  return res.status(400).json({
+    success: false,
+    message: "Cannot delete Brand because Products are associated with it.",
+  });
+}
+
     brand.isDeleted = true;
+     brand.isActive = false;
 
     await brand.save();
 

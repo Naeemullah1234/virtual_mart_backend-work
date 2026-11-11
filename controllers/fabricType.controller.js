@@ -1,4 +1,5 @@
 const FabricType = require("../models/fabricType.model");
+const Product = require("../models/product.model");
 const mongoose = require("mongoose");
 
 
@@ -6,17 +7,33 @@ const createFabricType = async (req, res) => {
   try {
     const { name, displayOrder } = req.body;
 
-    if (!name) {
+   if (typeof name !== "string" || !name.trim()) {
+  return res.status(400).json({
+    success: false,
+    message: "Fabric Type name is required.",
+  });
+}
 
-      return res.status(400).json({ success: false, message: "Fabric Type name is required.",});}
+const normalizedName = name.trim();
 
-    const existing = await FabricType.findOne({ name,isDeleted: false,});
+const escapedName = normalizedName.replace(
+  /[.*+?^${}()|[\]\\]/g,
+  "\\$&"
+);
+
+const existing = await FabricType.findOne({
+  name: { $regex: `^${escapedName}$`, $options: "i" },
+  isDeleted: false,
+});
 
     if (existing) {
 
       return res.status(400).json({success: false, message: "Fabric Type already exists.", });}
 
-    const fabricType = await FabricType.create({ name,displayOrder,});
+     const fabricType = await FabricType.create({
+  name: normalizedName,
+  displayOrder,
+});
 
     res.status(201).json({ success: true, message: "Fabric Type created successfully.",fabricType,});
 
@@ -28,7 +45,12 @@ const createFabricType = async (req, res) => {
   const getAllFabricTypes = async (req, res) => {
   try {
 
-    const fabricTypes = await FabricType.find({ isDeleted: false,}).sort({ displayOrder: 1,});
+     const fabricTypes = await FabricType.find({
+  isActive: true,
+  isDeleted: false,
+}).sort({
+  displayOrder: 1,
+});
 
     res.status(200).json({ success: true,count: fabricTypes.length,fabricTypes,});
 
@@ -43,9 +65,13 @@ const createFabricType = async (req, res) => {
 
       return res.status(400).json({ success: false,message: "Invalid Fabric Type ID.",});}
 
-    const fabricType = await FabricType.findById(req.params.id);
+    const fabricType = await FabricType.findOne({
+  _id: req.params.id,
+  isActive: true,
+  isDeleted: false,
+});
 
-    if (!fabricType || fabricType.isDeleted) {
+    if (!fabricType) {
 
       return res.status(404).json({success: false, message: "Fabric Type not found.",});}
 
@@ -64,13 +90,48 @@ const createFabricType = async (req, res) => {
 
     const { name, displayOrder, isActive } = req.body;
 
-    const fabricType = await FabricType.findById(req.params.id);
+    const fabricType = await FabricType.findOne({
+  _id: req.params.id,
+  isDeleted: false,
+});
 
-    if (!fabricType || fabricType.isDeleted) {
+    if (!fabricType) {
 
       return res.status(404).json({success: false,message: "Fabric Type not found.",});}
 
-    fabricType.name = name || fabricType.name;
+      if (
+  name !== undefined &&
+  (typeof name !== "string" || !name.trim())
+) {
+  return res.status(400).json({
+    success: false,
+    message: "Fabric Type name cannot be empty.",
+  });
+}
+
+  if (name !== undefined) {
+  const normalizedName = name.trim();
+
+ const escapedName = normalizedName.replace(
+  /[.*+?^${}()|[\]\\]/g,
+  "\\$&"
+);
+
+  const existingFabricType = await FabricType.findOne({
+    name: { $regex: `^${escapedName}$`, $options: "i" },
+    _id: { $ne: fabricType._id },
+    isDeleted: false,
+  });
+
+  if (existingFabricType) {
+    return res.status(400).json({
+      success: false,
+      message: "Fabric Type already exists.",
+    });
+  }
+
+  fabricType.name = normalizedName;
+}
     fabricType.displayOrder = displayOrder ?? fabricType.displayOrder;
 
     if (typeof isActive === "boolean") {
@@ -92,13 +153,29 @@ const createFabricType = async (req, res) => {
 
       return res.status(400).json({ success: false, message: "Invalid Fabric Type ID.",});}
 
-    const fabricType = await FabricType.findById(req.params.id);
+    const fabricType = await FabricType.findOne({
+  _id: req.params.id,
+  isDeleted: false,
+});
 
-    if (!fabricType || fabricType.isDeleted) {
+    if (!fabricType) {
 
       return res.status(404).json({success: false,message: "Fabric Type not found.",});}
 
+        const existingProducts = await Product.exists({
+  fabricType: fabricType._id,
+  isDeleted: false,
+});
+
+if (existingProducts) {
+  return res.status(400).json({
+    success: false,
+    message: "Cannot delete Fabric Type because Products are associated with it.",
+  });
+}
+
     fabricType.isDeleted = true;
+     fabricType.isActive = false;
 
     await fabricType.save();
 

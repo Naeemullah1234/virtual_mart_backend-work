@@ -163,7 +163,8 @@ if (existingProducts) {
   });
 }
 
-    subCategory.isDeleted = true;
+   subCategory.isDeleted = true;
+    subCategory.isActive = false;
 
     await subCategory.save();
 

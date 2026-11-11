@@ -1,4 +1,5 @@
 const ProductType = require("../models/productType.model");
+const Product = require("../models/product.model");
 const mongoose = require("mongoose");
 
 
@@ -6,17 +7,24 @@ const createProductType = async (req, res) => {
   try {
     const { name, displayOrder } = req.body;
 
-    if (!name) {
-      return res.status(400).json({
-        success: false,
-        message: "Product Type name is required.",
-      });
-    }
+    if (typeof name !== "string" || !name.trim()) {
+  return res.status(400).json({
+    success: false,
+    message: "Product Type name is required.",
+  });
+}
 
-    const existing = await ProductType.findOne({
-      name,
-      isDeleted: false,
-    });
+const normalizedName = name.trim();
+
+  const escapedName = normalizedName.replace(
+  /[.*+?^${}()|[\]\\]/g,
+  "\\$&"
+);
+
+const existing = await ProductType.findOne({
+  name: { $regex: `^${escapedName}$`, $options: "i" },
+  isDeleted: false,
+});
 
     if (existing) {
       return res.status(400).json({
@@ -24,11 +32,12 @@ const createProductType = async (req, res) => {
         message: "Product Type already exists.",
       });
     }
-
+          
     const productType = await ProductType.create({
-      name,
-      displayOrder,
-    });
+  name: normalizedName,
+  displayOrder,
+});
+    
 
     res.status(201).json({
       success: true,
@@ -80,9 +89,13 @@ const getProductTypeById = async (req, res) => {
       });
     }
 
-    const productType = await ProductType.findById(req.params.id);
+        const productType = await ProductType.findOne({
+  _id: req.params.id,
+  isActive: true,
+  isDeleted: false,
+});
 
-    if (!productType || productType.isDeleted) {
+    if (!productType) {
       return res.status(404).json({
         success: false,
         message: "Product Type not found.",
@@ -115,31 +128,51 @@ const updateProductType = async (req, res) => {
 
     const { name, displayOrder, isActive } = req.body;
 
-    const productType = await ProductType.findById(req.params.id);
+    const productType = await ProductType.findOne({
+  _id: req.params.id,
+  isDeleted: false,
+});
 
-    if (!productType || productType.isDeleted) {
+    if (!productType) {
       return res.status(404).json({
         success: false,
         message: "Product Type not found.",
       });
     }
 
-    if (name && name !== productType.name) {
-      const existing = await ProductType.findOne({
-        name,
-        isDeleted: false,
-        _id: { $ne: req.params.id },
-      });
+          if (
+  name !== undefined &&
+  (typeof name !== "string" || !name.trim())
+) {
+  return res.status(400).json({
+    success: false,
+    message: "Product Type name cannot be empty.",
+  });
+}
 
-      if (existing) {
-        return res.status(400).json({
-          success: false,
-          message: "Product Type already exists.",
-        });
-      }
+   if (name !== undefined) {
+  const normalizedName = name.trim();
 
-      productType.name = name;
-    }
+     const escapedName = normalizedName.replace(
+  /[.*+?^${}()|[\]\\]/g,
+  "\\$&"
+);
+
+  const existingProductType = await ProductType.findOne({
+    name: { $regex: `^${escapedName}$`, $options: "i" },
+    _id: { $ne: productType._id },
+    isDeleted: false,
+  });
+
+  if (existingProductType) {
+    return res.status(400).json({
+      success: false,
+      message: "Product Type already exists.",
+    });
+  }
+
+  productType.name = normalizedName;
+}
 
     if (displayOrder !== undefined) {
       productType.displayOrder = displayOrder;
@@ -176,16 +209,32 @@ const deleteProductType = async (req, res) => {
       });
     }
 
-    const productType = await ProductType.findById(req.params.id);
+       const productType = await ProductType.findOne({
+  _id: req.params.id,
+  isDeleted: false,
+});
 
-    if (!productType || productType.isDeleted) {
+    if (!productType) {
       return res.status(404).json({
         success: false,
         message: "Product Type not found.",
       });
     }
 
+       const existingProducts = await Product.exists({
+  productType: productType._id,
+  isDeleted: false,
+});
+
+if (existingProducts) {
+  return res.status(400).json({
+    success: false,
+    message: "Cannot delete Product Type because Products are associated with it.",
+  });
+}
+
     productType.isDeleted = true;
+    productType.isActive = false;
 
     await productType.save();
 

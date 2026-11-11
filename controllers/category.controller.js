@@ -190,6 +190,7 @@ if (existingProducts) {
 }
 
         category.isDeleted = true;
+        category.isActive = false;
 
         await category.save();
 

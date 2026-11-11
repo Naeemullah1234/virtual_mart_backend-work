@@ -11,7 +11,7 @@ const productTypeSchema = new mongoose.Schema(
 
     slug: {
       type: String,
-      unique: true,
+      unique: false,
       lowercase: true,
     },
 
@@ -35,13 +35,13 @@ const productTypeSchema = new mongoose.Schema(
   }
 );
 
-productTypeSchema.pre("save", function () {
-  this.slug = slugify(this.name, {
-    lower: true,
-    strict: true,
-  });
-
-
+productTypeSchema.pre("validate", function () {
+  if (this.isModified("name")) {
+    this.slug = slugify(this.name, {
+      lower: true,
+      strict: true,
+    });
+  }
 });
 
 module.exports = mongoose.model("ProductType", productTypeSchema);

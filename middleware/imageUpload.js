@@ -21,7 +21,7 @@ const createImageUpload = (folder, maxFiles) => {
   const fileFilter = (req, file, cb) => {
     if (!allowedTypes.includes(file.mimetype)) {
       return cb(
-        new Error("Only JPG, JPEG and WEBP images are allowed.")
+        new Error("Only JPG, JPEG, PNG and WEBP images are allowed.")
       );}
 
     return cb(null, true);};

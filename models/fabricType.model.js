@@ -35,12 +35,13 @@ const fabricTypeSchema = new mongoose.Schema(
   }
 );
 
-fabricTypeSchema.pre("save", function () {
-  this.slug = slugify(this.name, {
-    lower: true,
-    strict: true,
-  });
-
+fabricTypeSchema.pre("validate", function () {
+  if (this.isModified("name")) {
+    this.slug = slugify(this.name, {
+      lower: true,
+      strict: true,
+    });
+  }
 });
 
 module.exports = mongoose.model("FabricType", fabricTypeSchema);

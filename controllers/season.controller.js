@@ -1,4 +1,5 @@
 const Season = require("../models/season.model");
+const Product = require("../models/product.model");
 const mongoose = require("mongoose");
 
 // Create Season
@@ -6,17 +7,24 @@ const createSeason = async (req, res) => {
   try {
     const { name, displayOrder } = req.body;
 
-    if (!name) {
-      return res.status(400).json({
-        success: false,
-        message: "Season name is required.",
-      });
-    }
+    if (typeof name !== "string" || !name.trim()) {
+  return res.status(400).json({
+    success: false,
+    message: "Season name is required.",
+  });
+}
 
-    const existing = await Season.findOne({
-      name,
-      isDeleted: false,
-    });
+const normalizedName = name.trim();
+
+const escapedName = normalizedName.replace(
+  /[.*+?^${}()|[\]\\]/g,
+  "\\$&"
+);
+
+const existing = await Season.findOne({
+  name: { $regex: `^${escapedName}$`, $options: "i" },
+  isDeleted: false,
+});
 
     if (existing) {
       return res.status(400).json({
@@ -25,10 +33,10 @@ const createSeason = async (req, res) => {
       });
     }
 
-    const season = await Season.create({
-      name,
-      displayOrder,
-    });
+   const season = await Season.create({
+  name: normalizedName,
+  displayOrder,
+});
 
     res.status(201).json({
       success: true,
@@ -49,10 +57,11 @@ const createSeason = async (req, res) => {
 const getAllSeasons = async (req, res) => {
   try {
     const seasons = await Season.find({
-      isDeleted: false,
-    }).sort({
-      displayOrder: 1,
-    });
+  isActive: true,
+  isDeleted: false,
+}).sort({
+  displayOrder: 1,
+});
 
     res.status(200).json({
       success: true,
@@ -79,9 +88,13 @@ const getSeasonById = async (req, res) => {
       });
     }
 
-    const season = await Season.findById(req.params.id);
+  const season = await Season.findOne({
+  _id: req.params.id,
+  isActive: true,
+  isDeleted: false,
+});
 
-    if (!season || season.isDeleted) {
+    if (!season) {
       return res.status(404).json({
         success: false,
         message: "Season not found.",
@@ -114,31 +127,51 @@ const updateSeason = async (req, res) => {
 
     const { name, displayOrder, isActive } = req.body;
 
-    const season = await Season.findById(req.params.id);
+    const season = await Season.findOne({
+  _id: req.params.id,
+  isDeleted: false,
+});
 
-    if (!season || season.isDeleted) {
+    if (!season) {
       return res.status(404).json({
         success: false,
         message: "Season not found.",
       });
     }
 
-    if (name && name !== season.name) {
-      const existing = await Season.findOne({
-        name,
-        isDeleted: false,
-        _id: { $ne: req.params.id },
-      });
+    if (
+  name !== undefined &&
+  (typeof name !== "string" || !name.trim())
+) {
+  return res.status(400).json({
+    success: false,
+    message: "Season name cannot be empty.",
+  });
+}
 
-      if (existing) {
-        return res.status(400).json({
-          success: false,
-          message: "Season already exists.",
-        });
-      }
+      if (name !== undefined) {
+  const normalizedName = name.trim();
 
-      season.name = name;
-    }
+   const escapedName = normalizedName.replace(
+  /[.*+?^${}()|[\]\\]/g,
+  "\\$&"
+);
+
+  const existingSeason = await Season.findOne({
+    name: { $regex: `^${escapedName}$`, $options: "i" },
+    _id: { $ne: season._id },
+    isDeleted: false,
+  });
+
+  if (existingSeason) {
+    return res.status(400).json({
+      success: false,
+      message: "Season already exists.",
+    });
+  }
+
+  season.name = normalizedName;
+}
 
     if (displayOrder !== undefined) {
       season.displayOrder = displayOrder;
@@ -175,16 +208,32 @@ const deleteSeason = async (req, res) => {
       });
     }
 
-    const season = await Season.findById(req.params.id);
+    const season = await Season.findOne({
+  _id: req.params.id,
+  isDeleted: false,
+});
 
-    if (!season || season.isDeleted) {
+    if (!season) {
       return res.status(404).json({
         success: false,
         message: "Season not found.",
       });
     }
 
+     const existingProducts = await Product.exists({
+  season: season._id,
+  isDeleted: false,
+});
+
+if (existingProducts) {
+  return res.status(400).json({
+    success: false,
+    message: "Cannot delete Season because Products are associated with it.",
+  });
+}
+
     season.isDeleted = true;
+     season.isActive = false;
 
     await season.save();
 

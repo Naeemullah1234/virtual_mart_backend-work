@@ -8,13 +8,13 @@ const { createProductVariant,getProductVariants,updateProductVariant,deleteProdu
 
 router.post("/",protect,authorize("admin"),productVariantUpload,createProductVariant);
 
-router.get("/",protect,getAllProductVariants);
+router.get("/", getAllProductVariants);
 
-router.get("/filters",protect,getProductVariantFilters);
+router.get("/filters", getProductVariantFilters);
 
-router.get("/single/:variantId",protect,getProductVariantById);
+router.get("/single/:variantId", getProductVariantById);
 
-router.get("/:productId",protect,getProductVariants);
+router.get("/:productId", getProductVariants);
 
 router.put("/:variantId",protect,authorize("admin"),productVariantUpload,updateProductVariant);
 

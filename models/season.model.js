@@ -35,13 +35,13 @@ const seasonSchema = new mongoose.Schema(
   }
 );
 
-seasonSchema.pre("save", function () {
-  this.slug = slugify(this.name, {
-    lower: true,
-    strict: true,
-  });
-
- 
+seasonSchema.pre("validate", function () {
+  if (this.isModified("name")) {
+    this.slug = slugify(this.name, {
+      lower: true,
+      strict: true,
+    });
+  }
 });
 
 module.exports = mongoose.model("Season", seasonSchema);
