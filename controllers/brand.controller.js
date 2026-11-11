@@ -6,17 +6,24 @@ const createBrand = async (req, res) => {
   try {
     const { name, displayOrder } = req.body;
 
-    if (!name) {
-      return res.status(400).json({
-        success: false,
-        message: "Brand name is required.",
-      });
-    }
+   if (typeof name !== "string" || !name.trim()) {
+  return res.status(400).json({
+    success: false,
+    message: "Brand name is required.",
+  });
+}
 
-    const existing = await Brand.findOne({
-      name,
-      isDeleted: false,
-    });
+const normalizedName = name.trim();
+
+   const escapedName = normalizedName.replace(
+  /[.*+?^${}()|[\]\\]/g,
+  "\\$&"
+);
+
+const existing = await Brand.findOne({
+  name: { $regex: `^${escapedName}$`, $options: "i" },
+  isDeleted: false,
+});
 
     if (existing) {
       return res.status(400).json({
@@ -26,9 +33,9 @@ const createBrand = async (req, res) => {
     }
 
     const brand = await Brand.create({
-      name,
-      displayOrder,
-    });
+  name: normalizedName,
+  displayOrder,
+});
 
     res.status(201).json({
       success: true,
@@ -52,11 +59,12 @@ const createBrand = async (req, res) => {
 const getAllBrands = async (req, res) => {
   try {
 
-    const brands = await Brand.find({
-      isDeleted: false,
-    }).sort({
-      displayOrder: 1,
-    });
+   const brands = await Brand.find({
+  isActive: true,
+  isDeleted: false,
+}).sort({
+  displayOrder: 1,
+});
 
     res.status(200).json({
       success: true,

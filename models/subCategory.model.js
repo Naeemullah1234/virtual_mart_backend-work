@@ -21,10 +21,6 @@ const subCategorySchema = new mongoose.Schema(
       required: true,
     },
 
-    image: {
-      type: String,
-      default: "",
-    },
     displayOrder: {
     type: Number,
     default: 0,
@@ -46,13 +42,13 @@ const subCategorySchema = new mongoose.Schema(
   }
 );
 
-subCategorySchema.pre("save", function () {
-  this.slug = slugify(this.name, {
-    lower: true,
-    strict: true,
-  });
-
-
+subCategorySchema.pre("validate", function () {
+  if (this.isModified("name")) {
+    this.slug = slugify(this.name, {
+      lower: true,
+      strict: true,
+    });
+  }
 });
 
 module.exports = mongoose.model("SubCategory", subCategorySchema);

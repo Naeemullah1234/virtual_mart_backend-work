@@ -15,11 +15,6 @@ const brandSchema = new mongoose.Schema(
       lowercase: true,
     },
 
-    logo: {
-      type: String,
-      default: "",
-    },
-
     displayOrder: {
       type: Number,
       default: 0,
@@ -40,13 +35,13 @@ const brandSchema = new mongoose.Schema(
   }
 );
 
-brandSchema.pre("save", function () {
-  this.slug = slugify(this.name, {
-    lower: true,
-    strict: true,
-  });
-
-
+brandSchema.pre("validate", function () {
+  if (this.isModified("name")) {
+    this.slug = slugify(this.name, {
+      lower: true,
+      strict: true,
+    });
+  }
 });
 
 module.exports = mongoose.model("Brand", brandSchema);
