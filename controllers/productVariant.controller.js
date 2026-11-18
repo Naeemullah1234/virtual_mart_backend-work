@@ -1,9 +1,11 @@
 const Product = require("../models/product.model");
 const ProductVariant = require("../models/productVariant.model");
+const Order = require("../models/order.model");
 const { validateSKU,validatePrice,validateSalePrice,validateStock,
   validateAttributes,normalizeAttributes,validateImages} = require("../validators/productVariant.validator");
 const mongoose = require("mongoose");
 const cloudinary = require("../config/cloudinary");
+const { getOptimizedImageUrl } = require("../utils/cloudinaryImage");
 
 
 
@@ -28,10 +30,14 @@ const cleanupUploadedImages = async (files = []) => {
 
 
 const createProductVariant = async (req, res) => {
-
   let attributes;
+  let session;
+  let variantCreated = false;
 
   try {
+
+    const startTime = Date.now();
+
 
      try {
       attributes = JSON.parse(req.body.attributes);
@@ -42,7 +48,8 @@ const createProductVariant = async (req, res) => {
       });
     }
   
-const { sku,price: priceValue, salePrice: salePriceValue, stock: stockValue} = req.body;
+const {productId,sku,price: priceValue, salePrice: salePriceValue, 
+  stock: stockValue} = req.body;
 
 const price = Number(priceValue);
 const salePrice =
@@ -57,6 +64,26 @@ if (skuError) {
   return res.status(400).json({ success: false,message: skuError,});}
 
 const normalizedSKU = sku.trim().toUpperCase();
+
+if (!productId || !mongoose.Types.ObjectId.isValid(productId)) {
+  return res.status(400).json({
+    success: false,
+    message: "Valid Product ID is required.",
+  });
+}
+
+   const productExists = await Product.findOne({
+  _id: productId,
+  isDeleted: false,
+  isActive: true,
+});
+
+if (!productExists) {
+  return res.status(404).json({
+    success: false,
+    message: "Product not found or inactive.",
+  });
+}
 
 
 if ( !sku || !attributes || price === undefined ||stock === undefined
@@ -127,7 +154,26 @@ if (new Set(attributeKeys).size !== attributeKeys.length) {
   });
 }
 
-const variant = await ProductVariant.create({
+session = await mongoose.startSession();
+session.startTransaction();
+
+const activeProduct = await Product.findOne({
+  _id: productId,
+  isDeleted: false,
+  isActive: true,
+}).session(session);
+
+if (!activeProduct) {
+  await session.abortTransaction();
+
+  return res.status(404).json({
+    success: false,
+    message: "Product not found or inactive.",
+  });
+}
+
+const variant = new ProductVariant({
+  product: productId,
   sku: normalizedSKU,
   attributes: normalizedAttributes,
   price,
@@ -136,11 +182,50 @@ const variant = await ProductVariant.create({
   ...(image && { image }),
 });
 
+await variant.save({ session });
+
+const linkedProduct = await Product.findOneAndUpdate(
+  {
+    _id: productId,
+    isDeleted: false,
+    isActive: true,
+  },
+  {
+    $addToSet: {
+      variants: variant._id,
+    },
+  },
+  { session, new: true }
+);
+
+if (!linkedProduct) {
+  await session.abortTransaction();
+
+  return res.status(404).json({
+    success: false,
+    message: "Product not found or inactive.",
+  });
+}
+
+  await session.commitTransaction();
+
+variantCreated = true;
+
+console.log(
+  "createProductVariant total time:",
+  Date.now() - startTime,
+  "ms"
+);
+
 res.status(201).json({success: true,message: "Product variant created successfully.",variant,});
 
  } catch (error) {
 
-  await cleanupUploadedImages(req.files || []);
+  if (session?.inTransaction()) {
+    await session.abortTransaction();
+  }
+
+  
 
   console.log(error);
 
@@ -165,7 +250,18 @@ res.status(201).json({success: true,message: "Product variant created successful
   });
 }
 
-  return res.status(500).json({ success: false,message: "Server Error",});}}
+  return res.status(500).json({ success: false,message: "Server Error",});
+  
+} finally {
+  if (session) {
+    await session.endSession();
+  }
+
+  if (!variantCreated) {
+    await cleanupUploadedImages(req.files || []);
+  }
+}
+}
 
 
 
@@ -200,10 +296,22 @@ const variants = await ProductVariant.find({
   createdAt: -1,
 });
 
+    const optimizedVariants = variants.map((variant) => {
+  const variantObject = variant.toObject();
+
+  if (variantObject.image?.public_id) {
+    variantObject.image.optimizedUrl = getOptimizedImageUrl(
+      variantObject.image.public_id
+    );
+  }
+
+  return variantObject;
+});
+
 res.status(200).json({
   success: true,
   totalVariants: variants.length,
-  variants,
+  variants: optimizedVariants,
 });
 
   } catch (error) {
@@ -242,7 +350,7 @@ if (!mongoose.Types.ObjectId.isValid(variantId)) {
 
 const variant = await ProductVariant.findOne({
   _id: variantId,
- 
+  product: { $type: "objectId" },
 });
 
 if (!variant) {
@@ -254,13 +362,18 @@ if (!variant) {
   });
 }
 
-const {
-  sku,
-  price,
-  salePrice,
-  stock,
-   removeImage
-} = req.body;
+const linkedProduct = await Product.exists({_id: variant.product,isDeleted: false,isActive: true,});
+
+if (!linkedProduct) {
+  await cleanupUploadedImages(req.files || []);
+
+  return res.status(404).json({
+    success: false,
+    message: "Linked product not found or inactive.",
+  });
+}
+
+const {sku,price,salePrice,stock,removeImage} = req.body;
 
 // Validate removeImage
 let shouldRemoveImage = false;
@@ -309,22 +422,11 @@ if (sku !== undefined) {
   }
 
 }
-const normalizedSKU =
-  sku !== undefined
-    ? sku.trim().toUpperCase()
-    : undefined;
+const normalizedSKU = sku !== undefined ? sku.trim().toUpperCase(): undefined;
 
-    
+    const newPrice =price !== undefined? Number(price): variant.price;
 
-const newPrice =
-  price !== undefined
-    ? Number(price)
-    : variant.price;
-
-const newSalePrice =
-  salePrice !== undefined
-    ? Number(salePrice)
-    : variant.salePrice;
+const newSalePrice =salePrice !== undefined? Number(salePrice): variant.salePrice;
 
 // --------------------------------
 // Price Validation
@@ -345,10 +447,7 @@ if (priceError) {
 // Sale Price Validation
 // --------------------------------
 
-const salePriceError = validateSalePrice(
-  newPrice,
-  newSalePrice
-);
+const salePriceError = validateSalePrice(newPrice,newSalePrice);
 
 if (salePriceError) {
    await cleanupUploadedImages(req.files || []);
@@ -406,8 +505,7 @@ if (attributes !== undefined) {
       success: false,
       message: "Duplicate attribute keys are not allowed.",
     });
-  }
-}
+  }}
 
 // --------------------------------
 // SKU Duplicate Validation
@@ -415,11 +513,7 @@ if (attributes !== undefined) {
 
 if (normalizedSKU !== undefined) {
 
-  const existingSKU = await ProductVariant.findOne({
-    sku: normalizedSKU,
-    _id: { $ne: variantId },
-    
-  });
+  const existingSKU = await ProductVariant.findOne({sku: normalizedSKU,_id: { $ne: variantId },});
 
   if (existingSKU) {
      await cleanupUploadedImages(req.files || []);
@@ -565,23 +659,38 @@ const deleteProductVariant = async (req, res) => {
       });
     }
 
-  
-// --------------------------------
-// Delete Variant
-// --------------------------------
 
-if (variant.product) {
-  await Product.updateOne(
-    { _id: variant.product },
-    { $pull: { variants: variant._id } }
-  );
+    if (variant.product) {
+  return res.status(400).json({
+    success: false,
+    message: "Please unlink this variant from its product before deleting it.",
+  });
 }
 
-const imagePublicId = variant.image?.public_id;
-
-await ProductVariant.deleteOne({
-  _id: variantId,
+const existingOrder = await Order.exists({
+  "items.variant": variant._id,
 });
+
+if (existingOrder) {
+  return res.status(400).json({
+    success: false,
+    message: "This variant cannot be deleted because it is used in order history.",
+  });
+}
+
+const deletedVariant = await ProductVariant.findOneAndDelete({
+  _id: variantId,
+  product: null,
+});
+
+if (!deletedVariant) {
+  return res.status(400).json({
+    success: false,
+    message: "Variant is linked to a product and cannot be deleted.",
+  });
+}
+
+const imagePublicId = deletedVariant.image?.public_id;
 
 // Delete Variant Image from Cloudinary
 if (imagePublicId) {
@@ -658,49 +767,6 @@ const skip = (pageNumber - 1) * limitNumber;
         $options: "i",
       };
     }
-
-    // --------------------------------
-    // Status Filter
-    // --------------------------------
-
-//     const allowedStatuses = [
-//   "all",
-//   "active",
-//   "inactive",
-//   "deleted",
-// ];
-
-// if (!allowedStatuses.includes(status)) {
-//   return res.status(400).json({
-//     success: false,
-//     message: "Invalid status filter.",
-//   });
-// }
-
-// if (status === "active") {
-
-//   filter.isActive = true;
-//   filter.isDeleted = false;
-
-// } else if (status === "inactive") {
-
-//   filter.isActive = false;
-//   filter.isDeleted = false;
-
-// } else if (status === "deleted") {
-
-//   filter.isDeleted = true;
-
-// } else {
-
-//   // Default / All
-//   filter.isDeleted = false;
-
-// }
-
-    // --------------------------------
-    // Product Filter
-    // --------------------------------
 
   if (productId) {
   if (!mongoose.Types.ObjectId.isValid(productId)) {
@@ -813,6 +879,19 @@ if (!allowedStockStatuses.includes(stockStatus)) {
       .skip(skip)
       .limit(limitNumber);
 
+       
+       const optimizedVariants = variants.map((variant) => {
+  const variantObject = variant.toObject();
+
+  if (variantObject.image?.public_id) {
+    variantObject.image.optimizedUrl = getOptimizedImageUrl(
+      variantObject.image.public_id
+    );
+  }
+
+  return variantObject;
+});
+
     // --------------------------------
     // Pagination
     // --------------------------------
@@ -833,7 +912,7 @@ if (!allowedStockStatuses.includes(stockStatus)) {
         hasPreviousPage: pageNumber > 1,
       },
 
-      variants,
+      variants: optimizedVariants,
     });
 
   } catch (error) {
@@ -1056,13 +1135,21 @@ const getProductVariantById = async (req, res) => {
   }
 }
 
+     const variantObject = variant.toObject();
+
+if (variantObject.image?.public_id) {
+  variantObject.image.optimizedUrl = getOptimizedImageUrl(
+    variantObject.image.public_id
+  );
+}
+
     // --------------------------------
     // Success Response
     // --------------------------------
 
     return res.status(200).json({
       success: true,
-      variant,
+      variant: variantObject,
     });
 
   } catch (error) {

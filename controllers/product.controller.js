@@ -12,6 +12,7 @@ const cloudinary = require("../config/cloudinary");
 const Order = require("../models/order.model");
 const Review = require("../models/review.model");
 const { MAX_PRODUCT_IMAGES } = require("../config/upload.config");
+const { getOptimizedImageUrl } = require("../utils/cloudinaryImage");
 
 
 
@@ -69,23 +70,10 @@ const createProduct = async (req, res) => {
   let productCreated = false;
 
   try {
-    const {
-      name,
-      category,
-      productType,
-      subCategory,
-      fabricType,
-      brand,
-      season,
-      description,
-      featured,
-      bestSeller,
-      newArrival,
-    } = req.body;
 
-    // --------------------------------
-    // Product Name Validation
-    // --------------------------------
+    const startTime = Date.now();
+    const {name,category,productType,subCategory,fabricType,brand,
+      season,description,featured,bestSeller,newArrival,} = req.body;
 
     if (typeof name !== "string" || !name.trim()) {
       return res.status(400).json({
@@ -95,10 +83,6 @@ const createProduct = async (req, res) => {
     }
 
     const productName = name.trim();
-
-    // --------------------------------
-    // Description Validation
-    // --------------------------------
 
     if (
       description !== undefined &&
@@ -110,17 +94,7 @@ const createProduct = async (req, res) => {
       });
     }
 
-    // --------------------------------
-    // Required IDs Validation
-    // --------------------------------
-
-    const requiredIds = {
-      category,
-      productType,
-      subCategory,
-      fabricType,
-      brand,
-    };
+    const requiredIds = {category,productType,subCategory,fabricType,brand,};
 
     for (const [field, value] of Object.entries(requiredIds)) {
       if (!value) {
@@ -192,55 +166,6 @@ const createProduct = async (req, res) => {
         });
       }
     }
-
-    // --------------------------------
-    // Variants Validation
-    // --------------------------------
-
-    let variants = req.body.variants;
-
-    if (typeof variants === "string") {
-      try {
-        variants = JSON.parse(variants);
-      } catch (error) {
-        return res.status(400).json({
-          success: false,
-          message: "Variants must be a valid JSON array.",
-        });
-      }
-    }
-
-    if (!Array.isArray(variants) || variants.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: "At least one product variant is required.",
-      });
-    }
-
-    const invalidVariant = variants.find(
-      (id) =>
-        typeof id !== "string" ||
-        !mongoose.Types.ObjectId.isValid(id)
-    );
-
-    if (invalidVariant) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid Product Variant ID.",
-      });
-    }
-
-    const uniqueVariantIds = [
-      ...new Set(variants.map((id) => id.toString())),
-    ];
-
-    if (uniqueVariantIds.length !== variants.length) {
-      return res.status(400).json({
-        success: false,
-        message: "Duplicate product variant IDs are not allowed.",
-      });
-    }
-
     // --------------------------------
     // Images Validation
     // --------------------------------
@@ -284,19 +209,9 @@ const createProduct = async (req, res) => {
     // Check Related Records
     // --------------------------------
 
-    const [
-      categoryExists,
-      productTypeExists,
-      subCategoryExists,
-      fabricTypeExists,
-      brandExists,
-      seasonExists,
-    ] = await Promise.all([
-      Category.exists({
-        _id: category,
-        isDeleted: false,
-        isActive: true,
-      }),
+    const [categoryExists,productTypeExists,subCategoryExists,fabricTypeExists, 
+      brandExists,seasonExists,] = await Promise.all([
+      Category.exists({_id: category,isDeleted: false,isActive: true,}),
 
       ProductType.exists({
         _id: productType,
@@ -363,35 +278,8 @@ const createProduct = async (req, res) => {
     session = await mongoose.startSession();
     session.startTransaction();
 
-    // --------------------------------
-    // Check Variants Inside Transaction
-    // --------------------------------
 
-    const existingVariants = await ProductVariant.find({
-      _id: { $in: uniqueVariantIds },
-    })
-      .select("_id product")
-      .session(session);
 
-    if (existingVariants.length !== uniqueVariantIds.length) {
-      const error = new Error(
-        "One or more product variants were not found."
-      );
-      error.status = 404;
-      throw error;
-    }
-
-    const linkedVariant = existingVariants.find(
-      (variant) => variant.product != null
-    );
-
-    if (linkedVariant) {
-      const error = new Error(
-        "One or more product variants are already linked to another product."
-      );
-      error.status = 409;
-      throw error;
-    }
 
     // --------------------------------
     // Create Product
@@ -410,7 +298,7 @@ const createProduct = async (req, res) => {
           slug,
           description: description?.trim() || "",
           images,
-          variants: uniqueVariantIds,
+          variants: [],
           featured: normalizedFeatured,
           bestSeller: normalizedBestSeller,
           newArrival: normalizedNewArrival,
@@ -420,40 +308,14 @@ const createProduct = async (req, res) => {
     );
 
     // --------------------------------
-    // Link Variants to Product
-    // --------------------------------
-
-    const variantUpdate = await ProductVariant.updateMany(
-      {
-        _id: { $in: uniqueVariantIds },
-        $or: [
-          { product: null },
-          { product: { $exists: false } },
-        ],
-      },
-      {
-        $set: {
-          product: product._id,
-        },
-      },
-      { session }
-    );
-
-    if (variantUpdate.matchedCount !== uniqueVariantIds.length) {
-      const error = new Error(
-        "Some variants could not be linked to this product."
-      );
-      error.status = 409;
-      throw error;
-    }
-
-    // --------------------------------
     // Commit Transaction
     // --------------------------------
 
     await session.commitTransaction();
 
     productCreated = true;
+
+    console.log("createProduct total time:", Date.now() - startTime, "ms");
 
     return res.status(201).json({
       success: true,
@@ -496,7 +358,6 @@ const createProduct = async (req, res) => {
 
 
 
-// Get All Products
 const getAllProducts = async (req, res) => {
   try {
     const {search,category,productType,subCategory,fabricType,brand,season,featured,bestSeller,newArrival,
@@ -1074,14 +935,32 @@ const getProductById = async (req, res) => {
    
     const productObject = product.toObject();
 
-// Primary image always first
+     // Primary image always first
 productObject.images?.sort(
   (a, b) => Number(b.isPrimary) - Number(a.isPrimary)
 );
 
+// Add optimized URLs
+productObject.images = (productObject.images || []).map((image) => ({
+  ...image,
+  optimizedUrl: getOptimizedImageUrl(image.public_id),
+}));
+
 const thumbnail = productObject.images?.[0] || null;
 
 const productVariants = productObject.variants || [];
+
+   const optimizedVariants = productVariants.map((variant) => ({
+  ...variant,
+  image: variant.image
+    ? {
+        ...variant.image,
+        optimizedUrl: getOptimizedImageUrl(variant.image.public_id),
+      }
+    : variant.image,
+}));
+
+productObject.variants = optimizedVariants;
 
 const effectivePrices = productVariants
   .map((variant) => variant.salePrice ?? variant.price)
@@ -1170,8 +1049,8 @@ res.status(200).json({
 };
 // Update Product
 const updateProduct = async (req, res) => {
-
   let session;
+  let productUpdated = false;
 
   try {
 
@@ -1262,12 +1141,12 @@ if (variants !== undefined) {
     }
   }
 
-  if (!Array.isArray(variants) || variants.length === 0) {
-    return res.status(400).json({
-      success: false,
-      message: "At least one product variant is required.",
-    });
-  }
+ if (!Array.isArray(variants)) {
+  return res.status(400).json({
+    success: false,
+    message: "Variants must be an array.",
+  });
+}
 
   const invalidVariantId = variants.find(
     (variantId) => !mongoose.Types.ObjectId.isValid(variantId)
@@ -1461,11 +1340,7 @@ if (subCategory !== undefined) {
         });
       }
 
-      const brandExists = await Brand.findOne({
-        _id: brand,
-        isDeleted: false,
-        isActive: true,
-      });
+      const brandExists = await Brand.findOne({ _id: brand, isDeleted: false, isActive: true,});
 
       if (!brandExists) {
         return res.status(404).json({
@@ -1495,11 +1370,7 @@ if (subCategory !== undefined) {
       });
     }
 
-    const seasonExists = await Season.findOne({
-      _id: season,
-      isDeleted: false,
-      isActive: true,
-    });
+    const seasonExists = await Season.findOne({ _id: season,isDeleted: false,isActive: true, });
 
     if (!seasonExists) {
       return res.status(404).json({
@@ -1528,11 +1399,7 @@ if (name !== undefined) {
 
   product.name = trimmedName;
 
-  product.slug = await generateUniqueSlug(
-    trimmedName,
-    product._id
-  );
-}
+  product.slug = await generateUniqueSlug(trimmedName,product._id);}
 
    if (description !== undefined) {
   if (typeof description !== "string") {
@@ -1634,12 +1501,7 @@ product.images = finalImages;
 
 // Boolean Validation & Conversion
 
-const booleanFields = {
-  featured,
-  bestSeller,
-  newArrival,
-  isActive,
-};
+const booleanFields = {featured,bestSeller, newArrival,isActive,};
 
 const parsedBooleanFields = {};
 
@@ -1682,6 +1544,41 @@ session.startTransaction();
 
    // variants update logic
 if (variants !== undefined) {
+
+  const existingVariantsInTransaction = await ProductVariant.find({_id: { $in: uniqueVariantIds },})
+  .select("_id")
+  .session(session);
+
+if (existingVariantsInTransaction.length !== uniqueVariantIds.length) {
+  await session.abortTransaction();
+  await session.endSession();
+  session = null;
+
+  return res.status(404).json({
+    success: false,
+    message: "One or more product variants were not found.",
+  });
+}
+
+  const alreadyLinkedVariant = await ProductVariant.findOne({
+  _id: { $in: uniqueVariantIds },
+  product: {
+    $exists: true,
+    $nin: [null, product._id],
+  },
+}).session(session);
+
+if (alreadyLinkedVariant) {
+  await session.abortTransaction();
+  await session.endSession();
+  session = null;
+
+  return res.status(400).json({
+    success: false,
+    message:
+      "One or more product variants are already linked to another product.",
+  });
+}
   // Old variants ko unlink karo
   await ProductVariant.updateMany(
     {
@@ -1719,7 +1616,8 @@ if (variants !== undefined) {
     // --------------------------------
 
     await session.commitTransaction();
-    session.endSession();
+
+    productUpdated = true;
 
     // Delete removed images from Cloudinary after successful DB update
 if (removedImages.length > 0) {
@@ -1728,9 +1626,7 @@ if (removedImages.length > 0) {
       removedImages.map((publicId) =>
         cloudinary.uploader.destroy(publicId, {
           resource_type: "image",
-        })
-      )
-    );
+        })));
 
     results.forEach((result, index) => {
       if (
@@ -1741,11 +1637,7 @@ if (removedImages.length > 0) {
           "Cloudinary image deletion failed:",
           removedImages[index],
           result.status === "rejected" ? result.reason : result.value
-        );
-      }
-    });
-  });
-}
+        );}}); });}
 
     const updatedProduct = await Product.findById(product._id)
       .populate("category", "name slug")
@@ -1770,9 +1662,7 @@ if (removedImages.length > 0) {
     await session.abortTransaction();
   }
 
-  if (session) {
-    session.endSession();
-  }
+
 
   // Duplicate variant attributes
   if (
@@ -1799,6 +1689,14 @@ if (removedImages.length > 0) {
     success: false,
     message: "Server Error",
   });
+} finally {
+  if (session) {
+    await session.endSession();
+  }
+
+  if (!productUpdated) {
+    await cleanupUploadedImages(req.files || []);
+  }
 }
 };
 
@@ -1963,7 +1861,6 @@ const getDeletedProducts = async (req, res) => {
   }
 };
 
-// Restore Product - Admin
 const restoreProduct = async (req, res) => {
 
    let session;
@@ -2028,17 +1925,6 @@ if (conflictingVariant) {
     success: false,
     message:
       "One or more product variants are already linked to another product.",
-  });
-}
-   
-
-   if (variantIds.length === 0) {
-  await session.abortTransaction();
-  session.endSession();
-
-  return res.status(400).json({
-    success: false,
-    message: "Product has no variants to restore.",
   });
 }
 

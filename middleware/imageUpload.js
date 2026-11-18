@@ -31,7 +31,14 @@ const createImageUpload = (folder, maxFiles) => {
   }).array("images", maxFiles);
 
   return (req, res, next) => {
+
+    const uploadStartTime = Date.now();
     upload(req, res, (error) => {
+      console.log(
+  "Product image upload time:",
+  Date.now() - uploadStartTime,
+  "ms"
+);
       if (error) {
         if (error instanceof multer.MulterError) {
           return res.status(400).json({
