@@ -55,6 +55,19 @@ const productSchema = new mongoose.Schema(
 
     isActive: {type: Boolean,default: true,},
 
+    isVTOEnabled: {
+  type: Boolean,
+  default: false,
+},
+
+vtoTypes: {
+  type: [{
+    type: String,
+    enum: ["body", "head", "face", "ears", "neck"],
+  }],
+  default: [],
+},
+
     isDeleted: {type: Boolean,default: false,},},
 
   {timestamps: true,}

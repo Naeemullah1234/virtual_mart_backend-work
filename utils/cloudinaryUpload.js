@@ -18,13 +18,10 @@ const uploadToCloudinary = async (file, folder = "virtual-mart") => {
         resolve({
           url: result.secure_url,
           public_id: result.public_id,
-        });
-      }
-    );
+        });});
 
     stream.end(file.buffer);
-  });
-};
+  });};
 
 const deleteFromCloudinary = async (publicId) => {
   if (!publicId) return null;
@@ -32,7 +29,4 @@ const deleteFromCloudinary = async (publicId) => {
   return cloudinary.uploader.destroy(publicId);
 };
 
-module.exports = {
-  uploadToCloudinary,
-  deleteFromCloudinary,
-};
+module.exports = {uploadToCloudinary,deleteFromCloudinary,};

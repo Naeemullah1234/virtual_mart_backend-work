@@ -73,7 +73,7 @@ const createProduct = async (req, res) => {
 
     const startTime = Date.now();
     const {name,category,productType,subCategory,fabricType,brand,
-      season,description,featured,bestSeller,newArrival,} = req.body;
+      season,description,featured,bestSeller,newArrival,isVTOEnabled,vtoTypes,} = req.body;
 
     if (typeof name !== "string" || !name.trim()) {
       return res.status(400).json({
@@ -151,12 +151,10 @@ const createProduct = async (req, res) => {
     const normalizedFeatured = normalizeBoolean(featured);
     const normalizedBestSeller = normalizeBoolean(bestSeller);
     const normalizedNewArrival = normalizeBoolean(newArrival);
+   
 
-    const booleanFields = {
-      featured: normalizedFeatured,
-      bestSeller: normalizedBestSeller,
-      newArrival: normalizedNewArrival,
-    };
+    const booleanFields = {featured: normalizedFeatured,bestSeller: normalizedBestSeller,
+      newArrival: normalizedNewArrival,};
 
     for (const [field, value] of Object.entries(booleanFields)) {
       if (value === null) {
@@ -166,6 +164,55 @@ const createProduct = async (req, res) => {
         });
       }
     }
+
+    const normalizedVTOEnabled = normalizeBoolean(isVTOEnabled);
+
+if (normalizedVTOEnabled === null) {
+  return res.status(400).json({
+    success: false,
+    message: "isVTOEnabled must be true or false.",
+  });
+}
+
+// --------------------------------
+// VTO Types Validation
+// --------------------------------
+
+let normalizedVTOTypes = [];
+
+try {
+  normalizedVTOTypes =
+    typeof vtoTypes === "string"
+      ? JSON.parse(vtoTypes)
+      : vtoTypes || [];
+} catch (error) {
+  return res.status(400).json({
+    success: false,
+    message: "Invalid vtoTypes format.",
+  });
+}
+
+const allowedVTOTypes = ["body","head","face","ears","neck",];
+
+if (
+  !Array.isArray(normalizedVTOTypes) ||
+  normalizedVTOTypes.some(
+    (type) => !allowedVTOTypes.includes(type)
+  ) ||
+  new Set(normalizedVTOTypes).size !== normalizedVTOTypes.length
+) {
+  return res.status(400).json({
+    success: false,
+    message: "Invalid VTO types.",
+  });
+}
+
+if (normalizedVTOEnabled && normalizedVTOTypes.length === 0) {
+  return res.status(400).json({
+    success: false,
+    message: "At least one VTO type is required when VTO is enabled.",
+  });
+}
     // --------------------------------
     // Images Validation
     // --------------------------------
@@ -302,6 +349,8 @@ const createProduct = async (req, res) => {
           featured: normalizedFeatured,
           bestSeller: normalizedBestSeller,
           newArrival: normalizedNewArrival,
+          isVTOEnabled: normalizedVTOEnabled,
+          vtoTypes: normalizedVTOTypes,
         },
       ],
       { session }
@@ -904,12 +953,11 @@ const amountSaved = bestDiscountedVariant
 };
 
 
-// Get Product By ID
+
 const getProductById = async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Validate ObjectId
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({
         success: false,
@@ -936,9 +984,9 @@ const getProductById = async (req, res) => {
     const productObject = product.toObject();
 
      // Primary image always first
-productObject.images?.sort(
-  (a, b) => Number(b.isPrimary) - Number(a.isPrimary)
-);
+     productObject.images?.sort(
+      (a, b) => Number(b.isPrimary) - Number(a.isPrimary)
+     );
 
 // Add optimized URLs
 productObject.images = (productObject.images || []).map((image) => ({
@@ -1074,11 +1122,10 @@ const updateProduct = async (req, res) => {
     }
 
 const {name,category,productType,subCategory,fabricType,brand,season,description,
-  removedImages: removedImagesInput,featured,primaryImage,bestSeller,newArrival, isActive,} = req.body;
+  removedImages: removedImagesInput,featured,primaryImage,bestSeller,newArrival, 
+  isActive,isVTOEnabled,vtoTypes,} = req.body;
 
 let { variants } = req.body;
-
-
 let removedImages = removedImagesInput || [];
 
 try {
@@ -1520,6 +1567,86 @@ for (const [field, value] of Object.entries(booleanFields)) {
   }
 }
 
+    // --------------------------------
+// VTO Boolean Validation
+// --------------------------------
+
+let parsedVTOEnabled;
+
+if (isVTOEnabled !== undefined) {
+  if (
+    isVTOEnabled === true ||
+    isVTOEnabled === "true"
+  ) {
+    parsedVTOEnabled = true;
+  } else if (
+    isVTOEnabled === false ||
+    isVTOEnabled === "false"
+  ) {
+    parsedVTOEnabled = false;
+  } else {
+    return res.status(400).json({
+      success: false,
+      message: "isVTOEnabled must be true or false.",
+    });
+  }
+}
+
+// --------------------------------
+// VTO Types Validation
+// --------------------------------
+
+let parsedVTOTypes;
+
+if (vtoTypes !== undefined) {
+  try {
+    parsedVTOTypes =
+      typeof vtoTypes === "string"
+        ? JSON.parse(vtoTypes)
+        : vtoTypes;
+  } catch (error) {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid vtoTypes format.",
+    });
+  }
+
+  const allowedVTOTypes = ["body","head","face","ears","neck",];
+
+  if (
+    !Array.isArray(parsedVTOTypes) ||
+    parsedVTOTypes.some(
+      (type) =>
+        typeof type !== "string" ||
+        !allowedVTOTypes.includes(type)
+    ) ||
+    new Set(parsedVTOTypes).size !== parsedVTOTypes.length
+  ) {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid VTO types.",
+    });
+  }
+}
+
+// Check final VTO configuration
+
+const finalVTOEnabled =
+  parsedVTOEnabled ?? product.isVTOEnabled;
+
+const finalVTOTypes =
+  parsedVTOTypes ?? product.vtoTypes;
+
+if (
+  finalVTOEnabled &&
+  (!finalVTOTypes || finalVTOTypes.length === 0)
+) {
+  return res.status(400).json({
+    success: false,
+    message: "At least one VTO type is required when VTO is enabled.",
+  });
+}
+
 // Update Boolean Fields
 
 if (parsedBooleanFields.featured !== undefined) {
@@ -1536,6 +1663,17 @@ if (parsedBooleanFields.newArrival !== undefined) {
 
 if (parsedBooleanFields.isActive !== undefined) {
   product.isActive = parsedBooleanFields.isActive;
+}
+// --------------------------------
+// Update VTO Fields
+// --------------------------------
+
+if (parsedVTOEnabled !== undefined) {
+  product.isVTOEnabled = parsedVTOEnabled;
+}
+
+if (parsedVTOTypes !== undefined) {
+  product.vtoTypes = parsedVTOTypes;
 }
 
 

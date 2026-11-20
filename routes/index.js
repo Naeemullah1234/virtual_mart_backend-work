@@ -12,6 +12,7 @@ router.use("/brands", require("./brand.routes"));
 router.use("/seasons", require("./season.routes"));
 router.use("/product-types", require("./productType.routes"));
 router.use("/products", require("./product.routes"));
+router.use("/vto", require("./vto.routes"));
 router.use("/upload", uploadRoutes);
 router.use("/cart", require("./cart.routes"));
 router.use("/wishlist", require("./wishlist.routes"));
