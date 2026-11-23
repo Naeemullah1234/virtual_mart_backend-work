@@ -42,6 +42,33 @@ if (!product.vtoTypes || product.vtoTypes.length === 0) {
   });
 }
 
+    // Validate allowed VTO Types
+const allowedVTOTypes = [
+  "body",
+  "head",
+  "face",
+  "ears",
+  "neck",
+];
+
+const invalidVTOType = product.vtoTypes.some(
+  (type) => !allowedVTOTypes.includes(type)
+);
+
+if (invalidVTOType) {
+  return res.status(400).json({
+    success: false,
+    message: "Invalid VTO configuration for this product.",
+  });
+}
+
+   if (!Array.isArray(product.images) || product.images.length === 0) {
+  return res.status(404).json({
+    success: false,
+    message: "Product images not found.",
+  });
+}
+
     // Get Product Primary Image
     const primaryImage = product.images.find(
       (image) => image.isPrimary
