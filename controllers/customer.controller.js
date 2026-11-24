@@ -2,34 +2,24 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const Customer = require("../models/customer.model");
 const {validateName,validateEmail,validatePhone,validatePassword,} = require("../validators/customer.validator");
-const generateToken = require("../utils/generateToken");
-const { savePendingRegistration,getPendingRegistration,deletePendingRegistration,} = require("../utils/customerRegistrationStore");
+const PendingCustomerRegistration = require("../models/pendingCustomerRegistration.model");
+const { hashOTP } = require("../utils/otpHash");
 const { generateOTP,getOTPExpiry,} = require("../utils/otp");
 const {sendOTPEmail} = require("../utils/sendEmail");
+const crypto = require("crypto");
+const CustomerSession = require("../models/customerSession.model");
 
 
 const registerCustomer = async (req, res) => {
   try {
 
-    const {
-      firstName,
-      lastName,
-      email,
-      phone,
-      password,
-      avatar,
-    } = req.body;
+    const {firstName,lastName,email,phone,password,avatar,} = req.body;
 
     // --------------------------------
     // Required Fields
     // --------------------------------
 
-    if (
-      !firstName ||
-      !lastName ||
-      !email ||
-      !phone ||
-      !password
+    if (!firstName ||!lastName ||!email ||!phone ||!password
     ) {
       return res.status(400).json({
         success: false,
@@ -42,10 +32,7 @@ const registerCustomer = async (req, res) => {
     // Validate First Name
     // --------------------------------
 
-    const firstNameError = validateName(
-      firstName,
-      "First name"
-    );
+    const firstNameError = validateName(firstName,"First name");
 
     if (firstNameError) {
       return res.status(400).json({
@@ -58,10 +45,7 @@ const registerCustomer = async (req, res) => {
     // Validate Last Name
     // --------------------------------
 
-    const lastNameError = validateName(
-      lastName,
-      "Last name"
-    );
+    const lastNameError = validateName(lastName,"Last name");
 
     if (lastNameError) {
       return res.status(400).json({
@@ -156,62 +140,48 @@ const registerCustomer = async (req, res) => {
       salt
     );
 
-    // --------------------------------
-    // Generate OTP
-    // --------------------------------
+     // Generate OTP
+const otp = generateOTP();
 
-    const otp = generateOTP();
+const otpExpiresAt = new Date(Date.now() + 5 * 60 * 1000);
 
-    const otpExpiresAt = getOTPExpiry();
+const otpResendAvailableAt = new Date(
+  Date.now() + 30 * 1000
+);
 
+// Save Pending Registration in MongoDB
+const existingPending = await PendingCustomerRegistration.findOne({
+  email: normalizedEmail,
+});
 
-    const otpResendAvailableAt = new Date( Date.now() + 60 * 1000);
+    if (existingPending) {
+  return res.status(200).json({
+    success: true,
+    registrationPending: true,
+    message: "Registration is already pending. Please verify OTP or resend OTP.",
+    email: normalizedEmail,
+  });
+}
 
-    // --------------------------------
-    // Save Registration Temporarily
-    // --------------------------------
-
-    savePendingRegistration(normalizedEmail, {
-      firstName: firstName.trim(),
-      lastName: lastName.trim(),
-      email: normalizedEmail,
-      phone: normalizedPhone,
-      password: hashedPassword,
-      avatar: avatar || "",
-      otp,
-      otpExpiresAt,
-      otpResendAvailableAt: new Date(
-    Date.now() + 60 * 1000
-  ),
-
-  otpAttempts: 0,});
-    // --------------------------------
-    // Send OTP Email
-    // --------------------------------
-
-    try {
-
-      await sendOTPEmail(
-        normalizedEmail,
-        otp
-      );
-
-         } catch (emailError) {
-
-  console.log(
-    "CUSTOMER OTP EMAIL ERROR:",
-    emailError
-  );
-
-  // Remove temporary registration
-  deletePendingRegistration(normalizedEmail);
-
-  return res.status(500).json({
-        success: false,
-        message: "OTP email could not be sent.",
-      });
-    }
-
+await PendingCustomerRegistration.create({
+  firstName: firstName.trim(),
+  lastName: lastName.trim(),
+  email: normalizedEmail,
+  phone: normalizedPhone,
+  password: hashedPassword,
+  avatar: avatar || "",
+  otpHash: hashOTP(otp),
+  otpExpiresAt,
+  otpResendAvailableAt,
+  otpAttempts: 0,
+  expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+});
+    
+   // Send OTP Email in Background
+sendOTPEmail(normalizedEmail, otp).catch((emailError) => {
+  console.log("CUSTOMER OTP EMAIL ERROR:", emailError);
+});
+    
     // --------------------------------
     // Response
     // --------------------------------
@@ -241,10 +211,6 @@ const verifyCustomerRegistrationOTP = async (req, res) => {
   try {
     const { email, otp } = req.body;
 
-    // --------------------------------
-    // Required Fields
-    // --------------------------------
-
     if (!email || !otp) {
       return res.status(400).json({
         success: false,
@@ -252,47 +218,38 @@ const verifyCustomerRegistrationOTP = async (req, res) => {
       });
     }
 
-    // --------------------------------
-    // Normalize Email
-    // --------------------------------
-
     const normalizedEmail = email.trim().toLowerCase();
 
-    // --------------------------------
-    // Get Pending Registration
-    // --------------------------------
-
+    // Find Pending Registration in MongoDB
     const pendingRegistration =
-      getPendingRegistration(normalizedEmail);
+      await PendingCustomerRegistration.findOne({
+        email: normalizedEmail,
+      });
 
     if (!pendingRegistration) {
       return res.status(404).json({
         success: false,
-        message:
-          "Registration session not found or expired. Please register again.",
+        message: "Registration session not found or expired. Please register again.",
       });
     }
 
+    // Check OTP Attempts
+    if (pendingRegistration.otpAttempts >= 3) {
+      await PendingCustomerRegistration.deleteOne({
+        _id: pendingRegistration._id,
+      });
 
-    if (pendingRegistration.otpAttempts >= 5) {
-  deletePendingRegistration(normalizedEmail);
+      return res.status(429).json({
+        success: false,
+        message: "Too many incorrect OTP attempts. Please register again.",
+      });
+    }
 
-  return res.status(429).json({
-    success: false,
-    message:
-      "Too many incorrect OTP attempts. Please register again.",
-  });
-}
-
-    // --------------------------------
     // Check OTP Expiry
-    // --------------------------------
-
-    if (
-      !pendingRegistration.otpExpiresAt ||
-      pendingRegistration.otpExpiresAt < new Date()
-    ) {
-      deletePendingRegistration(normalizedEmail);
+    if (pendingRegistration.otpExpiresAt <= new Date()) {
+      await PendingCustomerRegistration.deleteOne({
+        _id: pendingRegistration._id,
+      });
 
       return res.status(400).json({
         success: false,
@@ -300,45 +257,42 @@ const verifyCustomerRegistrationOTP = async (req, res) => {
       });
     }
 
-    // --------------------------------
-    // Check OTP
-    // --------------------------------
+    // Verify Hashed OTP
+    if (hashOTP(otp) !== pendingRegistration.otpHash) {
+      pendingRegistration.otpAttempts += 1;
 
-  if (
-  String(pendingRegistration.otp) !==
-  String(otp).trim()
-) {
+      if (pendingRegistration.otpAttempts >= 3) {
+        await PendingCustomerRegistration.deleteOne({
+          _id: pendingRegistration._id,
+        });
 
-  pendingRegistration.otpAttempts += 1;
+        return res.status(429).json({
+          success: false,
+          message: "Too many incorrect OTP attempts. Please register again.",
+        });
+      }
 
-  savePendingRegistration(
-    normalizedEmail,
-    pendingRegistration
-  );
+      await pendingRegistration.save();
 
-  const remainingAttempts =
-    5 - pendingRegistration.otpAttempts;
+      return res.status(400).json({
+        success: false,
+        message: `Invalid OTP. ${3 - pendingRegistration.otpAttempts} attempt(s) remaining.`,
+      });
+    }
 
-  return res.status(400).json({
-    success: false,
-    message: `Invalid OTP. ${remainingAttempts} attempt(s) remaining.`,
-  });
-}
-
-    // --------------------------------
-    // Final Duplicate Check
-    // --------------------------------
-
+    // Final Duplicate Checks
     const existingEmail = await Customer.findOne({
       email: normalizedEmail,
     });
 
     if (existingEmail) {
-      deletePendingRegistration(normalizedEmail);
+      await PendingCustomerRegistration.deleteOne({
+        _id: pendingRegistration._id,
+      });
 
       return res.status(409).json({
         success: false,
-        message: "Email is already registered.",
+        message: "Email is already registered. Please login.",
       });
     }
 
@@ -347,7 +301,9 @@ const verifyCustomerRegistrationOTP = async (req, res) => {
     });
 
     if (existingPhone) {
-      deletePendingRegistration(normalizedEmail);
+      await PendingCustomerRegistration.deleteOne({
+        _id: pendingRegistration._id,
+      });
 
       return res.status(409).json({
         success: false,
@@ -355,10 +311,7 @@ const verifyCustomerRegistrationOTP = async (req, res) => {
       });
     }
 
-    // --------------------------------
-    // Create Customer
-    // --------------------------------
-
+    // Create Permanent Customer
     const customer = await Customer.create({
       firstName: pendingRegistration.firstName,
       lastName: pendingRegistration.lastName,
@@ -366,43 +319,31 @@ const verifyCustomerRegistrationOTP = async (req, res) => {
       phone: pendingRegistration.phone,
       password: pendingRegistration.password,
       avatar: pendingRegistration.avatar || "",
-
       role: "customer",
-
       isEmailVerified: true,
       isPhoneVerified: false,
       isVerified: true,
-
       isBlocked: false,
       isActive: true,
-
       otp: null,
       otpExpiresAt: null,
       otpPurpose: null,
       otpResendAvailableAt: null,
-
-      refreshToken: "",
+      otpAttempts: 0,
       tokenVersion: 0,
-
       loginAttempts: 0,
       lockUntil: null,
       isDeleted: false,
     });
 
-    // --------------------------------
-    // Delete Temporary Registration
-    // --------------------------------
-
-    deletePendingRegistration(normalizedEmail);
-
-    // --------------------------------
-    // Response
-    // --------------------------------
+    // Delete Pending Record Only After Customer Creation
+    await PendingCustomerRegistration.deleteOne({
+      _id: pendingRegistration._id,
+    });
 
     return res.status(201).json({
       success: true,
-      message:
-        "Email verified and customer registered successfully.",
+      message: "Email verified and customer registered successfully.",
 
       customer: {
         id: customer._id,
@@ -418,10 +359,7 @@ const verifyCustomerRegistrationOTP = async (req, res) => {
     });
 
   } catch (error) {
-    console.log(
-      "VERIFY CUSTOMER OTP ERROR:",
-      error
-    );
+    console.log("VERIFY CUSTOMER OTP ERROR:", error);
 
     return res.status(500).json({
       success: false,
@@ -431,13 +369,9 @@ const verifyCustomerRegistrationOTP = async (req, res) => {
 };
 
 
- const resendCustomerRegistrationOTP = async (req, res) => {
+const resendCustomerRegistrationOTP = async (req, res) => {
   try {
     const { email } = req.body;
-
-    // --------------------------------
-    // Email Required
-    // --------------------------------
 
     if (!email) {
       return res.status(400).json({
@@ -446,38 +380,40 @@ const verifyCustomerRegistrationOTP = async (req, res) => {
       });
     }
 
-    const normalizedEmail = email
-      .trim()
-      .toLowerCase();
+    const normalizedEmail = email.trim().toLowerCase();
 
-    // --------------------------------
-    // Get Pending Registration
-    // --------------------------------
-
+    // Find Pending Registration
     const pendingRegistration =
-      getPendingRegistration(normalizedEmail);
+      await PendingCustomerRegistration.findOne({
+        email: normalizedEmail,
+      });
 
     if (!pendingRegistration) {
       return res.status(404).json({
         success: false,
-        message:
-          "Registration session not found or expired. Please register again.",
+        message: "Registration session not found or expired. Please register again.",
       });
     }
 
-    // --------------------------------
-    // Check Resend Timer
-    // --------------------------------
+    // Check Pending Registration Expiry
+    if (pendingRegistration.expiresAt <= new Date()) {
+      await PendingCustomerRegistration.deleteOne({
+        _id: pendingRegistration._id,
+      });
 
+      return res.status(404).json({
+        success: false,
+        message: "Registration session expired. Please register again.",
+      });
+    }
+
+    // Check Resend Cooldown
     if (
       pendingRegistration.otpResendAvailableAt &&
       pendingRegistration.otpResendAvailableAt > new Date()
     ) {
       const remainingSeconds = Math.ceil(
-        (
-          pendingRegistration.otpResendAvailableAt -
-          new Date()
-        ) / 1000
+        (pendingRegistration.otpResendAvailableAt - new Date()) / 1000
       );
 
       return res.status(429).json({
@@ -486,62 +422,42 @@ const verifyCustomerRegistrationOTP = async (req, res) => {
       });
     }
 
-    // --------------------------------
     // Generate New OTP
-    // --------------------------------
-
     const otp = generateOTP();
 
-    const otpExpiresAt = getOTPExpiry();
+    pendingRegistration.otpHash = hashOTP(otp);
+   pendingRegistration.otpExpiresAt = new Date(
+  Date.now() + 5 * 60 * 1000
+);
 
-    const otpResendAvailableAt = new Date(
-      Date.now() + 60 * 1000
-    );
+    pendingRegistration.otpResendAvailableAt = new Date(
+  Date.now() + 30 * 1000
+);
 
-    // --------------------------------
-    // Update Temporary Registration
-    // --------------------------------
+    pendingRegistration.otpAttempts = 0;
 
-    pendingRegistration.otp = otp;
-    pendingRegistration.otpExpiresAt = otpExpiresAt;
-    pendingRegistration.otpResendAvailableAt =
-      otpResendAvailableAt;
+    // Extend Pending Registration Expiry
+    pendingRegistration.expiresAt = new Date(
+  Date.now() + 10 * 60 * 1000
+);
 
-    savePendingRegistration(
-      normalizedEmail,
-      pendingRegistration
-    );
+    await pendingRegistration.save();
 
-    // --------------------------------
     // Send New OTP
-    // --------------------------------
-
     try {
-
-      await sendOTPEmail(
-        normalizedEmail,
-        otp
-      );
-
+      await sendOTPEmail(normalizedEmail, otp);
     } catch (emailError) {
+      console.log("RESEND CUSTOMER OTP EMAIL ERROR:", emailError);
 
-      console.log(
-        "RESEND CUSTOMER OTP EMAIL ERROR:",
-        emailError
-      );
-
-      // Remove temporary registration
-      deletePendingRegistration(normalizedEmail);
+      // Allow immediate retry if email sending fails
+      pendingRegistration.otpResendAvailableAt = new Date();
+      await pendingRegistration.save();
 
       return res.status(500).json({
         success: false,
-        message: "OTP email could not be sent.",
+        message: "OTP email could not be sent. Please try again.",
       });
     }
-
-    // --------------------------------
-    // Response
-    // --------------------------------
 
     return res.status(200).json({
       success: true,
@@ -550,11 +466,7 @@ const verifyCustomerRegistrationOTP = async (req, res) => {
     });
 
   } catch (error) {
-
-    console.log(
-      "RESEND CUSTOMER OTP ERROR:",
-      error
-    );
+    console.log("RESEND CUSTOMER OTP ERROR:", error);
 
     return res.status(500).json({
       success: false,
@@ -1054,11 +966,13 @@ const resetCustomerPassword = async (req, res) => {
     // --------------------------------
     // Invalidate Existing Sessions
     // --------------------------------
-
-    customer.refreshToken = "";
     customer.tokenVersion += 1;
 
     await customer.save();
+
+    await CustomerSession.deleteMany({
+  customerId: customer._id,
+});
 
     // --------------------------------
     // Response
@@ -1260,7 +1174,7 @@ const resetCustomerPassword = async (req, res) => {
 
 
 
-/////
+
 
 const loginCustomer = async (req, res) => {
   try {
@@ -1284,6 +1198,36 @@ const customer = await Customer.findOne({
 
 if (!customer) {
   return res.status(401).json({  success: false,  message: "Invalid credentials.", });}
+
+  // Check Customer Account Status
+
+if (customer.isDeleted) {
+  return res.status(403).json({
+    success: false,
+    message: "Customer account not found or unavailable.",
+  });
+}
+
+if (!customer.isEmailVerified) {
+  return res.status(403).json({
+    success: false,
+    message: "Please verify your email before login.",
+  });
+}
+
+if (customer.isBlocked) {
+  return res.status(403).json({
+    success: false,
+    message: "Your account has been blocked.",
+  });
+}
+
+if (!customer.isActive) {
+  return res.status(403).json({
+    success: false,
+    message: "Your account is inactive.",
+  });
+}
 
 
 if (customer.lockUntil && customer.lockUntil > Date.now()) {
@@ -1313,7 +1257,6 @@ if (!isPasswordMatch) {
 
 customer.loginAttempts = 0;
 customer.lockUntil = null;
-customer.lastLogin = new Date();
 
 const accessToken = jwt.sign(
   {
@@ -1340,14 +1283,24 @@ const refreshToken = jwt.sign(
   }
 );
 
-customer.refreshToken = refreshToken;
+const refreshTokenHash = crypto
+  .createHash("sha256")
+  .update(refreshToken)
+  .digest("hex");
 
+await CustomerSession.create({
+  customerId: customer._id,
+  refreshTokenHash,
+  deviceInfo: req.get("user-agent") || "Unknown Device",
+  expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+});
+
+customer.lastLogin = new Date();
 await customer.save();
 
 return res.status(200).json({
   success: true,
   message: "Login successful.",
-
   accessToken,
   refreshToken,
 
@@ -1366,17 +1319,10 @@ return res.status(200).json({
 
     res.status(500).json({ success: false, message: "Server Error",});}};
 
-
-
-
+ 
 const refreshCustomerToken = async (req, res) => {
   try {
-
     const { refreshToken } = req.body;
-
-    // --------------------------------
-    // Refresh Token Required
-    // --------------------------------
 
     if (!refreshToken) {
       return res.status(401).json({
@@ -1385,33 +1331,43 @@ const refreshCustomerToken = async (req, res) => {
       });
     }
 
-    // --------------------------------
     // Verify Refresh Token
-    // --------------------------------
-
     const decoded = jwt.verify(
       refreshToken,
       process.env.JWT_REFRESH_SECRET
     );
 
-    // --------------------------------
-    // Check Customer
-    // --------------------------------
-
-    if (!decoded.id) {
+    // Check Customer Role
+    if (decoded.role !== "customer" || !decoded.id) {
       return res.status(401).json({
         success: false,
         message: "Invalid refresh token.",
       });
     }
 
-    // --------------------------------
-    // Find Customer
-    // --------------------------------
+    // Hash Refresh Token
+    const refreshTokenHash = crypto
+      .createHash("sha256")
+      .update(refreshToken)
+      .digest("hex");
 
+    // Find Device Session
+    const session = await CustomerSession.findOne({
+      customerId: decoded.id,
+      refreshTokenHash,
+      expiresAt: { $gt: new Date() },
+    });
+
+    if (!session) {
+      return res.status(401).json({
+        success: false,
+        message: "Session expired. Please login again.",
+      });
+    }
+
+    // Find Customer
     const customer = await Customer.findOne({
       _id: decoded.id,
-      refreshToken: refreshToken,
       isEmailVerified: true,
       isBlocked: false,
       isActive: true,
@@ -1425,14 +1381,8 @@ const refreshCustomerToken = async (req, res) => {
       });
     }
 
-    // --------------------------------
     // Token Version Check
-    // --------------------------------
-
-    if (
-      decoded.tokenVersion !==
-      customer.tokenVersion
-    ) {
+    if (decoded.tokenVersion !== customer.tokenVersion) {
       return res.status(401).json({
         success: false,
         message: "Session expired. Please login again.",
@@ -1440,10 +1390,7 @@ const refreshCustomerToken = async (req, res) => {
       });
     }
 
-    // --------------------------------
     // Generate New Access Token
-    // --------------------------------
-
     const accessToken = jwt.sign(
       {
         id: customer._id,
@@ -1452,14 +1399,9 @@ const refreshCustomerToken = async (req, res) => {
       },
       process.env.JWT_SECRET,
       {
-        expiresIn:
-          process.env.JWT_EXPIRES_IN || "15m",
+        expiresIn: process.env.JWT_EXPIRES_IN || "15m",
       }
     );
-
-    // --------------------------------
-    // Response
-    // --------------------------------
 
     return res.status(200).json({
       success: true,
@@ -1468,11 +1410,7 @@ const refreshCustomerToken = async (req, res) => {
     });
 
   } catch (error) {
-
-    console.log(
-      "CUSTOMER REFRESH TOKEN ERROR:",
-      error
-    );
+    console.log("CUSTOMER REFRESH TOKEN ERROR:", error);
 
     if (error.name === "TokenExpiredError") {
       return res.status(401).json({
@@ -1490,7 +1428,7 @@ const refreshCustomerToken = async (req, res) => {
       });
     }
 
-    return res.status(401).json({
+    return res.status(500).json({
       success: false,
       message: "Refresh token authentication failed.",
     });
@@ -1498,9 +1436,6 @@ const refreshCustomerToken = async (req, res) => {
 };
 
 
-
-
-    ////
 
 const getCustomerProfile = async (req, res) => {
   try {
@@ -1600,8 +1535,14 @@ customer.password = await bcrypt.hash(newPassword, salt);
 
 customer.loginAttempts = 0;
 customer.lockUntil = null;
+customer.tokenVersion += 1;
 
 await customer.save();
+
+// Delete all sessions after password change
+await CustomerSession.deleteMany({
+  customerId: customer._id,
+});
 
 res.status(200).json({ success: true, message: "Password changed successfully.",});
 
@@ -1609,42 +1550,34 @@ res.status(200).json({ success: true, message: "Password changed successfully.",
 
     res.status(500).json({ success: false,  message: "Server Error", }); }};
 
-
+  
 const logoutCustomer = async (req, res) => {
   try {
+    // Delete all sessions of this customer
+    await CustomerSession.deleteMany({
+      customerId: req.user._id,
+    });
 
-    // --------------------------------
-    // Remove Refresh Token
-    // --------------------------------
-
-    req.user.refreshToken = null;
-
-    // --------------------------------
-    // Revoke Current Access Tokens
-    // --------------------------------
-
-    req.user.tokenVersion += 1;
-
-    await req.user.save();
+    // Increment tokenVersion to invalidate all access tokens
+  await Customer.findByIdAndUpdate(req.user._id, {
+  $inc: { tokenVersion: 1 },
+});
 
     return res.status(200).json({
       success: true,
-      message: "Logged out successfully.",
+      message: "Logged out successfully from all devices.",
     });
 
   } catch (error) {
-
-    console.log(
-      "CUSTOMER LOGOUT ERROR:",
-      error
-    );
+    console.log("CUSTOMER LOGOUT ERROR:", error);
 
     return res.status(500).json({
       success: false,
-      message: "Server Error",
+      message: "Logout failed.",
     });
   }
 };
+
 
 
 

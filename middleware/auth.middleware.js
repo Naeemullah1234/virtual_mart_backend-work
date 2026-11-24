@@ -30,7 +30,14 @@ const protect = async (req, res, next) => {
       });
     }
 
-    let account;
+ if (!["admin", "customer"].includes(decoded.role)) {
+  return res.status(403).json({
+    success: false,
+    message: "Invalid account role.",
+  });
+}
+
+let account;
 
 if (decoded.role === "admin") {
   account = await Admin.findById(decoded.id)

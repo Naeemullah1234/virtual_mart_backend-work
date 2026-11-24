@@ -15,8 +15,6 @@ const customerSchema = new mongoose.Schema(
   
     avatar: { type: String, default: "", },
 
-     role: { type: String, enum: ["customer", "customer"],default: "customer"},
-
     isEmailVerified: { type: Boolean, default: false,},
 
     isPhoneVerified: { type: Boolean, default: false,},
@@ -36,8 +34,6 @@ const customerSchema = new mongoose.Schema(
       otpAttempts: {type: Number,default: 0,},
     
     otpResendAvailableAt: { type: Date,default: null,},
-
-   refreshToken: { type: String, default: "",},
 
     tokenVersion: { type: Number,default: 0,},
 

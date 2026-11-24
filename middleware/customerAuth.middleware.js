@@ -65,9 +65,7 @@ const customerProtect = async (req, res, next) => {
 
     const customer = await Customer.findById(
       decoded.id
-    ).select(
-      "-password -refreshToken -otp -otpExpiresAt"
-    );
+    ).select("-password -otp -otpExpiresAt");
 
     if (!customer) {
       return res.status(401).json({
