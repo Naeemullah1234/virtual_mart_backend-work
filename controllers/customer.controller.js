@@ -5,9 +5,9 @@ const {validateName,validateEmail,validatePhone,validatePassword,} = require("..
 const PendingCustomerRegistration = require("../models/pendingCustomerRegistration.model");
 const { hashOTP } = require("../utils/otpHash");
 const { generateOTP,getOTPExpiry,} = require("../utils/otp");
-const {sendOTPEmail} = require("../utils/sendEmail");
 const crypto = require("crypto");
 const CustomerSession = require("../models/customerSession.model");
+const {createEmailJob,} = require("../services/emailJob.service");
 
 
 const registerCustomer = async (req, res) => {
@@ -150,46 +150,64 @@ const otpResendAvailableAt = new Date(
 );
 
 // Save Pending Registration in MongoDB
+
+    
 const existingPending = await PendingCustomerRegistration.findOne({
   email: normalizedEmail,
 });
 
-    if (existingPending) {
+if (existingPending) {
   return res.status(200).json({
     success: true,
     registrationPending: true,
-    message: "Registration is already pending. Please verify OTP or resend OTP.",
+    message:
+      "Registration is already pending. Please verify OTP or resend OTP.",
     email: normalizedEmail,
   });
 }
 
-await PendingCustomerRegistration.create({
-  firstName: firstName.trim(),
-  lastName: lastName.trim(),
-  email: normalizedEmail,
-  phone: normalizedPhone,
-  password: hashedPassword,
-  avatar: avatar || "",
-  otpHash: hashOTP(otp),
-  otpExpiresAt,
-  otpResendAvailableAt,
-  otpAttempts: 0,
-  expiresAt: new Date(Date.now() + 10 * 60 * 1000),
-});
-    
-   // Send OTP Email in Background
-sendOTPEmail(normalizedEmail, otp).catch((emailError) => {
-  console.log("CUSTOMER OTP EMAIL ERROR:", emailError);
-});
-    
+const pendingRegistration =
+  await PendingCustomerRegistration.create({
+    firstName: firstName.trim(),
+    lastName: lastName.trim(),
+    email: normalizedEmail,
+    phone: normalizedPhone,
+    password: hashedPassword,
+    avatar: avatar || "",
+    otpHash: hashOTP(otp),
+    otpExpiresAt,
+    otpResendAvailableAt,
+    otpAttempts: 0,
+    expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+  });
+
+try {
+  await createEmailJob({
+    jobId: crypto.randomUUID(),
+    type: "sendOTP",
+    recipient: normalizedEmail,
+    payload: {
+      email: normalizedEmail,
+      otp,
+    },
+    jobExpiresAt: otpExpiresAt,
+    maxAttempts: 5,
+  });
+} catch (error) {
+  await PendingCustomerRegistration.deleteOne({
+    _id: pendingRegistration._id,
+  });
+
+  throw error;
+}
+
     // --------------------------------
     // Response
     // --------------------------------
 
     return res.status(200).json({
       success: true,
-      message:
-        "Registration started. OTP has been sent to your email.",
+      message:"Registration started. OTP email is being processed.",
       email: normalizedEmail,
     });
 

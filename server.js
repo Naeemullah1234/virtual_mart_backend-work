@@ -1,29 +1,34 @@
 const dotenv = require("dotenv");
 dotenv.config();
+
 const express = require("express");
-const dns = require("dns");
-dns.setServers(["8.8.8.8", "8.8.4.4"]);
 const path = require("path");
 const cors = require("cors");
-const connectDB = require("./config/db");
 const cron = require("node-cron");
+const {startEmailDispatcher,} = require("./services/emailDispatcher.service");
+const connectDB = require("./config/db");
 const cleanupOrphanImages = require("./utils/cleanupOrphanImages");
 const routes = require("./routes");
 const adminRoutes = require("./routes/admin.routes");
 const {startOrderNotificationRetry,} = require("./services/orderNotification.service");
 
-
-connectDB();
-
 const app = express();
 
+// Middleware
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use( "/uploads",express.static(path.join(__dirname, "uploads")));
+
+app.use(
+  "/uploads",
+  express.static(path.join(__dirname, "uploads"))
+);
+
+// Routes
 app.use("/api/admins", adminRoutes);
 app.use("/api", routes);
 
+// Global Error Handler
 app.use((err, req, res, next) => {
   console.error("GLOBAL API ERROR:", err);
 
@@ -45,22 +50,53 @@ app.use((err, req, res, next) => {
   });
 });
 
-
-
+// 404 Handler
 app.use((req, res) => {
-  res.status(404).json({success: false,message: "API Not Found",});});
-
-
-cron.schedule("0 2 * * *",
-  async () => {
-    await cleanupOrphanImages();},
-  {timezone: "Asia/Karachi",});
-
+  res.status(404).json({
+    success: false,
+    message: "API Not Found",
+  });
+});
 
 const PORT = process.env.PORT || 5000;
 
- startOrderNotificationRetry();
+// Application Startup
+const startServer = async () => {
+  try {
+    // 1. Connect MongoDB first
+    await connectDB();
 
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on http://localhost:${PORT}`);
-});
+    // Start MongoDB to Redis email dispatcher
+startEmailDispatcher();
+
+    // 2. Start order notification retry after DB connection
+    startOrderNotificationRetry();
+
+    // 3. Schedule orphan image cleanup
+    cron.schedule(
+      "0 2 * * *",
+      async () => {
+        try {
+          await cleanupOrphanImages();
+        } catch (error) {
+          console.error("ORPHAN IMAGE CLEANUP ERROR:", error);
+        }
+      },
+      {
+        timezone: "Asia/Karachi",
+      }
+    );
+
+    // 4. Start HTTP server
+    app.listen(PORT, () => {
+      console.log(`Server running on http://localhost:${PORT}`);
+    });
+
+  } catch (error) {
+    console.error("SERVER STARTUP FAILED:", error);
+
+    process.exit(1);
+  }
+};
+
+startServer();
