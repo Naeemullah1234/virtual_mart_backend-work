@@ -8,6 +8,7 @@ const { generateOTP,getOTPExpiry,} = require("../utils/otp");
 const crypto = require("crypto");
 const CustomerSession = require("../models/customerSession.model");
 const {createEmailJob,} = require("../services/emailJob.service");
+const mongoose = require("mongoose");
 
 
 const registerCustomer = async (req, res) => {
@@ -276,7 +277,10 @@ const verifyCustomerRegistrationOTP = async (req, res) => {
     }
 
     // Verify Hashed OTP
-    if (hashOTP(otp) !== pendingRegistration.otpHash) {
+    
+if (
+  hashOTP(String(otp).trim()) !== pendingRegistration.otpHash
+) {
       pendingRegistration.otpAttempts += 1;
 
       if (pendingRegistration.otpAttempts >= 3) {
@@ -439,47 +443,73 @@ const resendCustomerRegistrationOTP = async (req, res) => {
         message: `Please wait ${remainingSeconds} second(s) before requesting another OTP.`,
       });
     }
+     
 
-    // Generate New OTP
-    const otp = generateOTP();
 
-    pendingRegistration.otpHash = hashOTP(otp);
-   pendingRegistration.otpExpiresAt = new Date(
-  Date.now() + 5 * 60 * 1000
-);
 
-    pendingRegistration.otpResendAvailableAt = new Date(
-  Date.now() + 30 * 1000
-);
+const otp = generateOTP();
 
-    pendingRegistration.otpAttempts = 0;
+const otpExpiresAt = new Date(Date.now() + 5 * 60 * 1000);
+const otpResendAvailableAt = new Date(Date.now() + 30 * 1000);
+const registrationExpiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
-    // Extend Pending Registration Expiry
-    pendingRegistration.expiresAt = new Date(
-  Date.now() + 10 * 60 * 1000
-);
+const session = await mongoose.startSession();
 
-    await pendingRegistration.save();
+try {
+  await session.withTransaction(async () => {
+    const updatedRegistration =
+      await PendingCustomerRegistration.findOneAndUpdate(
+        {
+          _id: pendingRegistration._id,
+          expiresAt: { $gt: new Date() },
+          $or: [
+  { otpResendAvailableAt: null },
+  { otpResendAvailableAt: { $exists: false } },
+  { otpResendAvailableAt: { $lte: new Date() } },
+],
+        },
+        {
+          $set: {
+            otpHash: hashOTP(otp),
+            otpExpiresAt,
+            otpResendAvailableAt,
+            otpAttempts: 0,
+            expiresAt: registrationExpiresAt,
+          },
+        },
+        { new: true, session }
+      );
 
-    // Send New OTP
-    try {
-      await sendOTPEmail(normalizedEmail, otp);
-    } catch (emailError) {
-      console.log("RESEND CUSTOMER OTP EMAIL ERROR:", emailError);
-
-      // Allow immediate retry if email sending fails
-      pendingRegistration.otpResendAvailableAt = new Date();
-      await pendingRegistration.save();
-
-      return res.status(500).json({
-        success: false,
-        message: "OTP email could not be sent. Please try again.",
-      });
+    if (!updatedRegistration) {
+      throw new Error("RESEND_NOT_ALLOWED");
     }
 
+    await createEmailJob({
+      jobId: crypto.randomUUID(),
+      type: "sendOTP",
+      recipient: normalizedEmail,
+      payload: { email: normalizedEmail, otp },
+      jobExpiresAt: otpExpiresAt,
+      maxAttempts: 5,
+      session,
+    });
+  });
+} catch (error) {
+  if (error.message === "RESEND_NOT_ALLOWED") {
+    return res.status(429).json({
+      success: false,
+      message: "Please wait before requesting another OTP.",
+    });
+  }
+
+  throw error;
+} finally {
+  await session.endSession();
+}
+     
     return res.status(200).json({
       success: true,
-      message: "New OTP has been sent to your email.",
+      message: "New OTP email is being processed.",
       email: normalizedEmail,
     });
 

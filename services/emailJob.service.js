@@ -1,7 +1,6 @@
+
 const EmailJob = require("../models/emailJob.model");
-const {
-  encryptPayload,
-} = require("../utils/emailPayloadEncryption");
+const { encryptPayload } = require("../utils/emailPayloadEncryption");
 
 const createEmailJob = async ({
   jobId,
@@ -10,26 +9,30 @@ const createEmailJob = async ({
   payload,
   jobExpiresAt = null,
   maxAttempts = 5,
+  session = null,
 }) => {
   if (!jobId || !type || !recipient || !payload) {
     throw new Error("Required email job data is missing.");
   }
 
   const normalizedRecipient = recipient.trim().toLowerCase();
-
   const encryptedPayload = encryptPayload(payload);
 
+  const emailJobData = {
+    jobId,
+    type,
+    recipient: normalizedRecipient,
+    payloadEncrypted: encryptedPayload,
+    jobExpiresAt,
+    maxAttempts,
+    status: "pending",
+    nextAttemptAt: new Date(),
+  };
+
   try {
-    const emailJob = await EmailJob.create({
-      jobId,
-      type,
-      recipient: normalizedRecipient,
-      payloadEncrypted: encryptedPayload,
-      jobExpiresAt,
-      maxAttempts,
-      status: "pending",
-      nextAttemptAt: new Date(),
-    });
+    const emailJob = session
+      ? await new EmailJob(emailJobData).save({ session })
+      : await EmailJob.create(emailJobData);
 
     return {
       created: true,
@@ -37,8 +40,7 @@ const createEmailJob = async ({
       status: emailJob.status,
     };
   } catch (error) {
-    // Handle duplicate job creation safely
-    if (error.code === 11000) {
+    if (error.code === 11000 && !session) {
       const existingJob = await EmailJob.findOne({ jobId })
         .select("jobId status");
 
@@ -56,6 +58,4 @@ const createEmailJob = async ({
   }
 };
 
-module.exports = {
-  createEmailJob,
-};
+module.exports = { createEmailJob };

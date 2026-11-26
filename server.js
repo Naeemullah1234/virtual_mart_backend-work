@@ -11,6 +11,7 @@ const cleanupOrphanImages = require("./utils/cleanupOrphanImages");
 const routes = require("./routes");
 const adminRoutes = require("./routes/admin.routes");
 const {startOrderNotificationRetry,} = require("./services/orderNotification.service");
+const mongoose = require("mongoose");
 
 const app = express();
 
@@ -65,6 +66,9 @@ const startServer = async () => {
   try {
     // 1. Connect MongoDB first
     await connectDB();
+
+    console.log("CONNECTED DATABASE:", mongoose.connection.name);
+console.log("CONNECTED HOST:", mongoose.connection.host);
 
     // Start MongoDB to Redis email dispatcher
 startEmailDispatcher();

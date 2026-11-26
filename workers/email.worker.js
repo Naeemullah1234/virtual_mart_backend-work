@@ -1,21 +1,13 @@
-
 require("dotenv").config();
 
 const { Worker } = require("bullmq");
 const IORedis = require("ioredis");
 const crypto = require("crypto");
-
 const connectDB = require("../config/db");
-
 const EmailJob = require("../models/emailJob.model");
-const PendingCustomerRegistration = require(
-  "../models/pendingCustomerRegistration.model"
-);
-
+const PendingCustomerRegistration = require("../models/pendingCustomerRegistration.model");
 const { sendOTPEmail } = require("../utils/sendEmail");
-const { decryptPayload } = require(
-  "../utils/emailPayloadEncryption"
-);
+const { decryptPayload } = require("../utils/emailPayloadEncryption");
 const { hashOTP } = require("../utils/otpHash");
 
 const LOCK_MINUTES = 10;
@@ -89,6 +81,39 @@ const processOTPEmail = async (job) => {
     return;
   }
 
+    // Renew MongoDB lock every 2 minutes
+const lockRenewal = setInterval(async () => {
+  try {
+    const renewed = await EmailJob.updateOne(
+      {
+        _id: emailJob._id,
+        status: "processing",
+        lockToken,
+      },
+      {
+        $set: {
+          lockedUntil: new Date(
+            Date.now() + LOCK_MINUTES * 60 * 1000
+          ),
+        },
+      }
+    );
+
+    if (renewed.modifiedCount !== 1) {
+      console.error(
+        `MongoDB lock renewal failed: ${jobId}`
+      );
+    }
+  } catch (error) {
+    console.error(
+      `MongoDB lock renewal error (${jobId}):`,
+      error.message
+    );
+  }
+}, 2 * 60 * 1000);
+
+lockRenewal.unref();
+
   try {
     // 2. Check pending registration and OTP expiry
     const registration =
@@ -153,10 +178,6 @@ const processOTPEmail = async (job) => {
         jobId
       );
     }
-
-    console.log(
-      `OTP email sent successfully to ${emailJob.recipient}`
-    );
 
   } catch (error) {
     const attempts = emailJob.attempts;
@@ -228,6 +249,9 @@ const processOTPEmail = async (job) => {
     // BullMQ job will be removed.
     // MongoDB dispatcher will manage the next retry.
   }
+  finally {
+  clearInterval(lockRenewal);
+}
 };
 
 const startEmailWorker = async () => {
@@ -279,6 +303,7 @@ const startEmailWorker = async () => {
 
     process.exit(1);
   }
+
 };
 
 startEmailWorker();
