@@ -31,7 +31,7 @@ const customerSchema = new mongoose.Schema(
 
     otpPurpose: {  type: String, enum: ["verification","forgotPassword","forgotPasswordVerified",null,], default: null,},
 
-      otpAttempts: {type: Number,default: 0,},
+    otpAttempts: {type: Number,default: 0,},
     
     otpResendAvailableAt: { type: Date,default: null,},
 

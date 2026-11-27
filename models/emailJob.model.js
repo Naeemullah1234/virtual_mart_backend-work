@@ -14,11 +14,12 @@ const emailJobSchema = new mongoose.Schema(
     type: {
       type: String,
       required: true,
-      enum: [
-        "sendOTP",
-        "sendOrderStatus",
-        "sendInvoice",
-      ],
+     enum: [
+  "sendOTP",
+  "sendForgotPasswordOTP",
+  "sendOrderStatus",
+  "sendInvoice",
+],
     },
 
     recipient: {

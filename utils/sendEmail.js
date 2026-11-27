@@ -12,37 +12,40 @@ const transporter = nodemailer.createTransport({
   },
 });
 
-const sendOTPEmail = async (email, otp) => {
+
+const sendOTPEmail = async (email, otp, purpose = "verification") => {
   try {
+    const isPasswordReset = purpose === "forgotPassword";
+
     const mailOptions = {
       from: `"Check Mart" <${process.env.EMAIL_USER}>`,
       to: email,
 
-      subject: "CHECK MART Email Verification OTP",
+      subject: isPasswordReset
+        ? "Check Mart Password Reset OTP"
+        : "Check Mart Email Verification OTP",
 
       html: `
         <div style="font-family: Arial, sans-serif;">
-          <h2>Check Mart Email Verification</h2>
-
-          <p>Your verification OTP is:</p>
-
-          <h1 style="letter-spacing: 5px;">
-            ${otp}
-          </h1>
+          <h2>Check Mart</h2>
 
           <p>
-            This OTP will expire in
-            <strong>10 minutes</strong>.
+            ${
+              isPasswordReset
+                ? "Your password reset OTP is:"
+                : "Your email verification OTP is:"
+            }
           </p>
 
-          <p>
-            Please Don't Share This OTP with anyone else.
-          </p>
+          <h1 style="letter-spacing: 5px;">${otp}</h1>
 
           <p>
-            If you did not request this OTP,
-            please ignore this email.
+            This OTP will expire in <strong>5 minutes</strong>.
           </p>
+
+          <p>Please do not share this OTP with anyone.</p>
+
+          <p>If you did not request this OTP, please ignore this email.</p>
         </div>
       `,
     };
@@ -50,13 +53,11 @@ const sendOTPEmail = async (email, otp) => {
     await transporter.sendMail(mailOptions);
 
   } catch (error) {
-    console.log("========== EMAIL ERROR ==========");
-    console.log(error);
-    console.log("=================================");
-
+    console.log("EMAIL ERROR:", error.message);
     throw error;
   }
 };
+
 
    const sendInvoiceEmail = async (email, order, invoiceUrl) => {
   try {

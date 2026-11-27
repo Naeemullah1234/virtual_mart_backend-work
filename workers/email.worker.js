@@ -6,6 +6,7 @@ const crypto = require("crypto");
 const connectDB = require("../config/db");
 const EmailJob = require("../models/emailJob.model");
 const PendingCustomerRegistration = require("../models/pendingCustomerRegistration.model");
+const Customer = require("../models/customer.model");
 const { sendOTPEmail } = require("../utils/sendEmail");
 const { decryptPayload } = require("../utils/emailPayloadEncryption");
 const { hashOTP } = require("../utils/otpHash");
@@ -36,6 +37,8 @@ const getDeleteDate = () =>
 const processOTPEmail = async (job) => {
   const { jobId } = job.data;
 
+  const jobType = job.name;
+
   if (!jobId) {
     throw new Error("Email job ID is missing.");
   }
@@ -47,7 +50,7 @@ const processOTPEmail = async (job) => {
   const emailJob = await EmailJob.findOneAndUpdate(
     {
       jobId,
-      type: "sendOTP",
+     type: jobType,
       status: "queued",
      $expr: {
   $lt: ["$attempts", "$maxAttempts"],
@@ -116,18 +119,26 @@ lockRenewal.unref();
 
   try {
     // 2. Check pending registration and OTP expiry
-    const registration =
-      await PendingCustomerRegistration.findOne({
-        email: emailJob.recipient,
-        expiresAt: { $gt: new Date() },
-        otpExpiresAt: { $gt: new Date() },
-      });
+       let otpRecord;
 
-    if (!registration) {
-      throw new Error(
-        "Registration or OTP has expired."
-      );
-    }
+if (jobType === "sendOTP") {
+  otpRecord = await PendingCustomerRegistration.findOne({
+    email: emailJob.recipient,
+    expiresAt: { $gt: new Date() },
+    otpExpiresAt: { $gt: new Date() },
+  });
+} else if (jobType === "sendForgotPasswordOTP") {
+  otpRecord = await Customer.findOne({
+    email: emailJob.recipient,
+    isDeleted: false,
+    otpPurpose: "forgotPassword",
+    otpExpiresAt: { $gt: new Date() },
+  });
+}
+
+if (!otpRecord) {
+  throw new Error("Registration or OTP has expired or been replaced.");
+}
 
     // 3. Decrypt payload
     const payload = decryptPayload(
@@ -145,12 +156,23 @@ lockRenewal.unref();
     }
 
     // 4. Verify this is still the latest OTP
-    if (hashOTP(otp) !== registration.otpHash) {
-      throw new Error("OTP has been replaced by a newer OTP.");
-    }
+    const savedOTPHash =
+  jobType === "sendOTP"
+    ? otpRecord.otpHash
+    : otpRecord.otp;
+
+if (hashOTP(otp) !== savedOTPHash) {
+  throw new Error("OTP has been replaced by a newer OTP.");
+}
 
     // 5. Send email
-    await sendOTPEmail(email, otp);
+    await sendOTPEmail(
+  email,
+  otp,
+  jobType === "sendForgotPasswordOTP"
+    ? "forgotPassword"
+    : "verification"
+);
 
     // 6. Mark job completed only if we still own its lock
     const completed = await EmailJob.updateOne(

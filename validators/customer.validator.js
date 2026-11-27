@@ -10,8 +10,7 @@ const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&.#^()_\-+=])[
 
 
 const validateName = (name, fieldName) => {
-
-  if (!name || name.trim() === "") {
+  if (typeof name !== "string" || name.trim() === "") {
     return `${fieldName} is required.`;
   }
 
@@ -22,7 +21,6 @@ const validateName = (name, fieldName) => {
   }
 
   return null;
-
 };
 
 

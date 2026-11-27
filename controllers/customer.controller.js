@@ -179,7 +179,7 @@ const pendingRegistration =
     otpExpiresAt,
     otpResendAvailableAt,
     otpAttempts: 0,
-    expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+    expiresAt: new Date(Date.now() + 5 * 60 * 1000),
   });
 
 try {
@@ -451,7 +451,7 @@ const otp = generateOTP();
 
 const otpExpiresAt = new Date(Date.now() + 5 * 60 * 1000);
 const otpResendAvailableAt = new Date(Date.now() + 30 * 1000);
-const registrationExpiresAt = new Date(Date.now() + 10 * 60 * 1000);
+const registrationExpiresAt = new Date(Date.now() + 5 * 60 * 1000);
 
 const session = await mongoose.startSession();
 
@@ -593,61 +593,37 @@ const forgotCustomerPassword = async (req, res) => {
       });
     }
 
-    // --------------------------------
     // Generate OTP
-    // --------------------------------
+const otp = generateOTP();
 
-    const otp = generateOTP();
+const otpExpiresAt = new Date(
+  Date.now() + 5 * 60 * 1000
+);
 
-    const otpExpiresAt = getOTPExpiry();
+// Save Hashed OTP
+customer.otp = hashOTP(otp);
+customer.otpExpiresAt = otpExpiresAt;
+customer.otpPurpose = "forgotPassword";
+customer.otpAttempts = 0;
+customer.otpResendAvailableAt = new Date(
+  Date.now() + 60 * 1000
+);
 
-    // --------------------------------
-    // Save OTP
-    // --------------------------------
+await customer.save();
 
-    customer.otp = otp;
-    customer.otpExpiresAt = otpExpiresAt;
-    customer.otpPurpose = "forgotPassword";
-    customer.otpAttempts = 0;
-    customer.otpResendAvailableAt = new Date(
-      Date.now() + 60 * 1000
-    );
+       // Send OTP Through BullMQ
 
-    await customer.save();
-
-    // --------------------------------
-    // Send OTP Email
-    // --------------------------------
-
-    try {
-
-      await sendOTPEmail(
-        normalizedEmail,
-        otp
-      );
-
-    } catch (emailError) {
-
-      console.log(
-        "FORGOT PASSWORD OTP EMAIL ERROR:",
-        emailError
-      );
-
-      // Invalidate OTP if email fails
-
-      customer.otp = null;
-      customer.otpExpiresAt = null;
-      customer.otpPurpose = null;
-      customer.otpResendAvailableAt = null;
-
-      await customer.save();
-
-      return res.status(500).json({
-        success: false,
-        message: "OTP email could not be sent.",
-      });
-    }
-
+await createEmailJob({
+  jobId: crypto.randomUUID(),
+  type: "sendForgotPasswordOTP",
+  recipient: normalizedEmail,
+  payload: {
+    email: normalizedEmail,
+    otp,
+  },
+  jobExpiresAt: otpExpiresAt,
+  maxAttempts: 5,
+});
     // --------------------------------
     // Response
     // --------------------------------
@@ -655,7 +631,7 @@ const forgotCustomerPassword = async (req, res) => {
     return res.status(200).json({
       success: true,
       message:
-        "Password reset OTP has been sent to your email.",
+        "Password reset OTP email is being processed.",
       email: normalizedEmail,
     });
 
@@ -796,11 +772,10 @@ if (customer.otpAttempts >= 5) {
 // --------------------------------
 // Check OTP
 // --------------------------------
-
-if (
-  String(customer.otp) !==
-  String(otp).trim()
+  if (
+  hashOTP(String(otp).trim()) !== customer.otp
 ) {
+
 
   customer.otpAttempts += 1;
 
@@ -843,12 +818,14 @@ if (
     // OTP Verified
     // --------------------------------
 
-    customer.otp = null;
-    customer.otpExpiresAt = null;
-    customer.otpResendAvailableAt = null;
-    customer.otpAttempts = 0;
+   customer.otp = null;
+customer.otpExpiresAt = new Date(
+  Date.now() + 5 * 60 * 1000
+);
+customer.otpResendAvailableAt = null;
+customer.otpAttempts = 0;
 
-    customer.otpPurpose = "forgotPasswordVerified";
+customer.otpPurpose = "forgotPasswordVerified";
 
     await customer.save();
 
@@ -960,6 +937,22 @@ const resetCustomerPassword = async (req, res) => {
           "Please verify the password reset OTP first.",
       });
     }
+
+        // Check Password Reset Verification Expiry
+if (
+  !customer.otpExpiresAt ||
+  customer.otpExpiresAt <= new Date()
+) {
+  customer.otpPurpose = null;
+  customer.otpExpiresAt = null;
+
+  await customer.save();
+
+  return res.status(400).json({
+    success: false,
+    message: "Password reset session expired. Please verify OTP again.",
+  });
+}
 
     // --------------------------------
     // Check Same Password
@@ -1137,63 +1130,40 @@ const resetCustomerPassword = async (req, res) => {
       });
     }
 
-    // --------------------------------
-    // Generate New OTP
-    // --------------------------------
+       // Generate New OTP
+const otp = generateOTP();
 
-    const otp = generateOTP();
+const otpExpiresAt = new Date(
+  Date.now() + 5 * 60 * 1000
+);
 
-    const otpExpiresAt = getOTPExpiry();
+const otpResendAvailableAt = new Date(
+  Date.now() + 60 * 1000
+);
 
-    const otpResendAvailableAt = new Date(
-      Date.now() + 60 * 1000
-    );
+// Save Hashed OTP
+customer.otp = hashOTP(otp);
+customer.otpExpiresAt = otpExpiresAt;
+customer.otpPurpose = "forgotPassword";
+customer.otpAttempts = 0;
+customer.otpResendAvailableAt = otpResendAvailableAt;
 
-    // --------------------------------
-    // Save New OTP
-    // --------------------------------
+await customer.save();
+    
 
-    customer.otp = otp;
-    customer.otpExpiresAt = otpExpiresAt;
-    customer.otpPurpose = "forgotPassword";
-    customer.otpAttempts = 0;
-    customer.otpResendAvailableAt =
-      otpResendAvailableAt;
+       // Send OTP Through BullMQ
 
-    await customer.save();
-
-    // --------------------------------
-    // Send Email
-    // --------------------------------
-
-    try {
-
-      await sendOTPEmail(
-        normalizedEmail,
-        otp
-      );
-
-    } catch (emailError) {
-
-      console.log(
-        "RESEND FORGOT PASSWORD OTP EMAIL ERROR:",
-        emailError
-      );
-
-      // Invalidate OTP if email failed
-
-      customer.otp = null;
-      customer.otpExpiresAt = null;
-      customer.otpPurpose = null;
-      customer.otpResendAvailableAt = null;
-
-      await customer.save();
-
-      return res.status(500).json({
-        success: false,
-        message: "OTP email could not be sent.",
-      });
-    }
+await createEmailJob({
+  jobId: crypto.randomUUID(),
+  type: "sendForgotPasswordOTP",
+  recipient: normalizedEmail,
+  payload: {
+    email: normalizedEmail,
+    otp,
+  },
+  jobExpiresAt: otpExpiresAt,
+  maxAttempts: 5,
+});
 
     // --------------------------------
     // Response
@@ -1202,7 +1172,7 @@ const resetCustomerPassword = async (req, res) => {
     return res.status(200).json({
       success: true,
       message:
-        "New password reset OTP has been sent to your email.",
+        "Password reset OTP email is being processed.",
       email: normalizedEmail,
     });
 
@@ -1221,28 +1191,31 @@ const resetCustomerPassword = async (req, res) => {
 };
 
 
-
-
-
 const loginCustomer = async (req, res) => {
   try {
     
   const { email,phone,password,} = req.body;
 
-if ((!email && !phone) || !password) {
-  return res.status(400).json({ success: false, message: "Email or phone and password are required.", });}
+if ((!email && !phone) || (email && phone) || !password) {
+  return res.status(400).json({
+    success: false,
+    message: "Provide either email or phone and password.",
+  });
+}
 
 const normalizedEmail = email
   ? email.trim().toLowerCase()
   : null;
 
-const normalizedPhone = phone ? phone.trim() : null;
+const normalizedPhone = phone
+  ? phone.trim()
+  : null;
 
-
-const customer = await Customer.findOne({
-  $or: [
-    ...(normalizedEmail ? [{ email: normalizedEmail }] : []),
-    ...(normalizedPhone ? [{ phone: normalizedPhone }] : []), ],}).select("+password");
+const customer = await Customer.findOne(
+  normalizedEmail
+    ? { email: normalizedEmail }
+    : { phone: normalizedPhone }
+).select("+password");
 
 if (!customer) {
   return res.status(401).json({  success: false,  message: "Invalid credentials.", });}
@@ -1438,24 +1411,66 @@ const refreshCustomerToken = async (req, res) => {
       });
     }
 
-    // Generate New Access Token
-    const accessToken = jwt.sign(
-      {
-        id: customer._id,
-        role: "customer",
-        tokenVersion: customer.tokenVersion,
-      },
-      process.env.JWT_SECRET,
-      {
-        expiresIn: process.env.JWT_EXPIRES_IN || "15m",
-      }
-    );
+       
+// Generate New Access Token
+const tokenPayload = {
+  id: customer._id,
+  role: "customer",
+  tokenVersion: customer.tokenVersion,
+};
 
-    return res.status(200).json({
-      success: true,
-      message: "Access token refreshed successfully.",
-      accessToken,
-    });
+const accessToken = jwt.sign(
+  tokenPayload,
+  process.env.JWT_SECRET,
+  {
+    expiresIn: process.env.JWT_EXPIRES_IN || "15m",
+  }
+);
+
+// Generate New Refresh Token
+const newRefreshToken = jwt.sign(
+  tokenPayload,
+  process.env.JWT_REFRESH_SECRET,
+  {
+    expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || "7d",
+  }
+);
+
+// Hash New Refresh Token
+const newRefreshTokenHash = crypto
+  .createHash("sha256")
+  .update(newRefreshToken)
+  .digest("hex");
+
+// Rotate Old Refresh Token
+const updatedSession = await CustomerSession.updateOne(
+  {
+    _id: session._id,
+    refreshTokenHash,
+    expiresAt: { $gt: new Date() },
+  },
+  {
+    $set: {
+      refreshTokenHash: newRefreshTokenHash,
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+    },
+  }
+);
+
+if (updatedSession.modifiedCount !== 1) {
+  return res.status(401).json({
+    success: false,
+    message: "Session expired. Please login again.",
+  });
+}
+
+return res.status(200).json({
+  success: true,
+  message: "Tokens refreshed successfully.",
+  accessToken,
+  refreshToken: newRefreshToken,
+});
+
 
   } catch (error) {
     console.log("CUSTOMER REFRESH TOKEN ERROR:", error);
@@ -1527,8 +1542,15 @@ if (lastName !== undefined) {
 
   req.user.lastName = lastName.trim();}
 
-if (avatar !== undefined) {
-  req.user.avatar = avatar;
+    if (avatar !== undefined) {
+  if (typeof avatar !== "string" || !avatar.trim()) {
+    return res.status(400).json({
+      success: false,
+      message: "Please provide a valid avatar URL.",
+    });
+  }
+
+  req.user.avatar = avatar.trim();
 }
 
 await req.user.save();
