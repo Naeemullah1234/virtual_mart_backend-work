@@ -5,19 +5,16 @@ const { validateName,validateEmail,validatePhone,validatePassword,} = require(".
 const {generateOTP,getOTPExpiry,} = require("../utils/otp");
 const {sendOTPEmail,} = require("../utils/sendEmail");
 const pendingAdminSignups = new Map();
+const crypto = require("crypto");
+const PendingAdminRegistration = require("../models/pendingAdminRegistration.model");
+const { hashOTP } = require("../utils/otpHash");
+const { createEmailJob } = require("../services/emailJob.service");
 
 
 
 const createAdmin = async (req, res) => {
   try {
-    const {
-      firstName,
-      lastName,
-      email,
-      phone,
-      password,
-      avatar,
-    } = req.body;
+    const {firstName,lastName,email,phone,password,avatar,} = req.body;
 
     console.log("CREATE ADMIN BODY:", req.body);
 
@@ -25,12 +22,7 @@ const createAdmin = async (req, res) => {
     // Required Fields
     // --------------------------------
 
-    if (
-      !firstName ||
-      !lastName ||
-      !email ||
-      !phone ||
-      !password
+    if (!firstName ||!lastName ||!email ||!phone ||!password
     ) {
       return res.status(400).json({
         success: false,
@@ -106,6 +98,19 @@ const createAdmin = async (req, res) => {
     // Check Existing Permanent Admin
     // --------------------------------
 
+
+       const existingName = await Admin.findOne({
+  firstName: firstName.trim(),
+  lastName: lastName.trim(),
+}).collation({ locale: "en", strength: 2 });
+
+if (existingName) {
+  return res.status(400).json({
+    success: false,
+    message: "Admin with this full name already exists.",
+  });
+}
+
     const existingEmail = await Admin.findOne({
       email: normalizedEmail,
     });
@@ -138,47 +143,39 @@ const createAdmin = async (req, res) => {
     // Generate OTP
     // --------------------------------
 
-    const otp = generateOTP();
-    const otpExpiresAt = getOTPExpiry();
+   const otp = generateOTP();
+const otpExpiresAt = new Date(Date.now() + 5 * 60 * 1000);
 
-    // --------------------------------
-    // TEMPORARY SIGNUP DATA
-    // --------------------------------
-    // IMPORTANT:
-    // Admin is NOT saved to MongoDB here.
-    // Data is temporarily stored in Map.
+await PendingAdminRegistration.findOneAndDelete({
+  email: normalizedEmail,
+});
 
-   pendingAdminSignups.set(normalizedEmail, {
+await PendingAdminRegistration.create({
   firstName: firstName.trim(),
   lastName: lastName.trim(),
   email: normalizedEmail,
   phone: normalizedPhone,
   password: hashedPassword,
   avatar: avatar || "",
-  otp,
+  otpHash: hashOTP(otp),
   otpExpiresAt,
-  otpResendAvailableAt: new Date(
-    Date.now() + 60 * 1000
-  ),
+  otpAttempts: 0,
+  otpResendAvailableAt: new Date(Date.now() + 60 * 1000),
+  expiresAt: otpExpiresAt,
 });
 
-    // --------------------------------
-    // Send OTP Email
-    // --------------------------------
+await createEmailJob({
+  jobId: crypto.randomUUID(),
+  type: "sendAdminOTP",
+  recipient: normalizedEmail,
+  payload: {
+    email: normalizedEmail,
+    otp,
+  },
+  jobExpiresAt: otpExpiresAt,
+  maxAttempts: 5,
+});
 
-    try {
-      await sendOTPEmail(normalizedEmail, otp);
-    } catch (emailError) {
-      console.log("OTP EMAIL ERROR:", emailError);
-
-      // Remove temporary signup
-      pendingAdminSignups.delete(normalizedEmail);
-
-      return res.status(500).json({
-        success: false,
-        message: "OTP could not be sent. Please try again.",
-      });
-    }
 
     // --------------------------------
     // Success
@@ -186,7 +183,7 @@ const createAdmin = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: "OTP has been sent to your email. Please verify your OTP.",
+      message: "Admin verification OTP is being processed.",
       email: normalizedEmail,
     });
 

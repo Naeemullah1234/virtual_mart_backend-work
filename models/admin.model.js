@@ -2,9 +2,9 @@ const mongoose = require("mongoose");
 
 const adminSchema = new mongoose.Schema(
   {
-    firstName: { type: String,required: true,unique: true,trim: true,},
+    firstName: { type: String,required: true,trim: true,},
 
-    lastName: {type: String,required: true,unique: true,trim: true,},
+    lastName: {type: String,required: true,trim: true,},
 
     email: {type: String,required: true,unique: true,lowercase: true, trim: true,},
 
@@ -33,10 +33,19 @@ const adminSchema = new mongoose.Schema(
     tokenVersion: {type: Number,default: 0,},
 
     lastLogin: {type: Date, default: null,},
+ },
 
-    
-  },
-  { timestamps: true,}
+   { timestamps: true,},
 );
+
+  
+ adminSchema.index(
+  { firstName: 1, lastName: 1 },
+  {
+    unique: true,
+    collation: { locale: "en", strength: 2 },
+  }
+);
+
 
 module.exports = mongoose.model("Admin", adminSchema);

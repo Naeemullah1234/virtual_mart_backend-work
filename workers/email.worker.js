@@ -285,13 +285,11 @@ const startEmailWorker = async () => {
     const emailWorker = new Worker(
       "emailQueue",
       async (job) => {
-        if (job.name === "sendOTP") {
-          await processOTPEmail(job);
-        } else {
-          throw new Error(
-            `Unsupported email job: ${job.name}`
-          );
-        }
+        if (["sendOTP", "sendForgotPasswordOTP"].includes(job.name)) {
+  await processOTPEmail(job);
+} else {
+  throw new Error(`Unsupported email job: ${job.name}`);
+}
       },
       {
         connection: redisConnection,

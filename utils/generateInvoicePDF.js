@@ -531,7 +531,7 @@ const footerY = Math.max(
         .font("Helvetica")
         .fontSize(6.8)
         .fillColor(dark)
-        .text("Email: checkmart@gmail.com", right - 220, footerY + 20, {
+        .text("Email: checkmaart@gmail.com", right - 220, footerY + 20, {
           width: 220,
           align: "right",
         });

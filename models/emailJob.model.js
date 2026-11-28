@@ -17,6 +17,7 @@ const emailJobSchema = new mongoose.Schema(
      enum: [
   "sendOTP",
   "sendForgotPasswordOTP",
+  "sendAdminOTP",
   "sendOrderStatus",
   "sendInvoice",
 ],
